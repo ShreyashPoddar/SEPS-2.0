@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import InaugurationHome from "./pages/InaugurationHome.jsx";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -35,7 +36,8 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<InaugurationHome />} />
+        <Route path="/inauguration" element={<InaugurationHome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -59,7 +61,7 @@ export default function App() {
         />
         <Route path="/teacher/my-teams" element={<MyTeams />} />
         <Route path="/teacher/set-global-deadline" element={<SetGlobalDeadlineWrapper />} />
-    <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
+        <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
       </Routes>
     </Router>
   );
