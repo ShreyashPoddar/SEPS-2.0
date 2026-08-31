@@ -26,6 +26,10 @@ import {
   getApplicationsForProject,
   getPendingInvitations,
   respondToInvitation,
+  getMyApplications,
+  raiseTicket,
+  getStudentTickets,
+  cancelTicket,
 } from "../controllers/studentprojectapply.controller.js";
 import { protectRoute } from "../middlewares/auth.middlewares.js";
 
@@ -35,12 +39,19 @@ const router = express.Router();
 // A logged-in student applies to a project
 router.post("/apply", protectRoute, applyToProject);
 
+// A logged-in student gets all their submitted applications
+router.get("/my-applications", protectRoute, getMyApplications);
+
 // A logged-in student gets their pending group invitations
 router.get("/invitations", protectRoute, getPendingInvitations);
 
 // A logged-in student responds (accepts/rejects) an invitation
 router.post("/invitations/respond", protectRoute, respondToInvitation);
 
+// Change Tickets
+router.post("/tickets", protectRoute, raiseTicket);
+router.get("/tickets", protectRoute, getStudentTickets);
+router.delete("/tickets/:ticketId", protectRoute, cancelTicket);
 
 // --- Teacher Specific Route ---
 // A logged-in teacher gets all applications for one of their projects

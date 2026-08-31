@@ -50,7 +50,7 @@ export const searchUsers = async (req, res) => {
       unavailableStudentIds.add(s._id.toString())
     );
 
-    // 🔹 Now search only available students
+    // 🔹 Now search only available students with full academic profile fields
     const users = await User.find(
       {
         role: "student",
@@ -60,7 +60,17 @@ export const searchUsers = async (req, res) => {
         ],
         _id: { $nin: Array.from(unavailableStudentIds) },
       },
-      { _id: 1, regNo: 1, fullName: 1, email: 1 }
+      {
+        _id: 1,
+        regNo: 1,
+        fullName: 1,
+        email: 1,
+        department: 1,
+        internshipStatus: 1,
+        internshipCompany: 1,
+        cgpa: 1,
+        skills: 1,
+      }
     ).limit(10);
 
     res.json(users);

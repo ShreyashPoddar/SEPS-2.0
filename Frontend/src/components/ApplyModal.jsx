@@ -31,15 +31,10 @@ const useDebounce = (value, delay) => {
 };
 
 export default function ApplyModal({ project, currentUser, onClose, onApplySuccess }) {
-  // Leader info
-  const leader = currentUser || {
-    fullName: "You (Team Leader)",
-    regNo: "RA2111003010123",
-    department: "Dept of ECE",
-    internshipStatus: "regular",
-    skills: ["Embedded Systems", "IoT"],
-  };
-
+  // Dynamic Leader info from authenticated user
+  const leader = currentUser || {};
+  const leaderName = leader.fullName || leader.name || "Team Leader";
+  const leaderRegNo = leader.regNo || "N/A";
   const leaderDept = leader.department || "Dept of ECE";
   const leaderCohort = leader.internshipStatus || "regular"; // 'regular' | 'internship'
 

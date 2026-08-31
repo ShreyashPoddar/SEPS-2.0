@@ -36,6 +36,16 @@ const userSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    internshipStatus: {
+      type: String,
+      enum: ["regular", "internship"],
+      default: "regular",
+    },
+    internshipCompany: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     skills: {
       type: [String],
       default: [],

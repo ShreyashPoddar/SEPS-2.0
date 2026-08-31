@@ -8,6 +8,12 @@ const memberSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   regNo: { type: String, required: true },
+  department: { type: String, default: "Dept of ECE" },
+  internshipStatus: {
+    type: String,
+    enum: ["regular", "internship"],
+    default: "regular",
+  },
   status: {
     type: String,
     enum: ["pending", "approved"],
@@ -28,6 +34,15 @@ const studentProjectApplySchema = new mongoose.Schema(
       enum: ["individual", "group"],
       required: true,
     },
+    cohortTrack: {
+      type: String,
+      enum: ["regular", "internship"],
+      default: "regular",
+    },
+    hasCrossBranch: {
+      type: Boolean,
+      default: false,
+    },
     members: [memberSchema],
     status: {
       type: String,
@@ -47,7 +62,6 @@ const studentProjectApplySchema = new mongoose.Schema(
     appliedAt: {
       type: Date,
       default: () => new Date(),
-      expires: 60 * 60 * 24 * 2, // 2 days TTL
     },
   },
   { timestamps: true }

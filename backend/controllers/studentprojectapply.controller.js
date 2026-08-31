@@ -1,8 +1,9 @@
 import StudentProjectApply from "../models/studentprojectapply.models.js";
 import Project from "../models/projectupload.models.js";
 import User from "../models/auth.models.js";
+import Ticket from "../models/ticket.model.js";
 
-// The applyToProject function now creates pending invitations without sending emails.
+// The applyToProject function now validates cohort tracks and cross-branch assignments dynamically from DB
 export const applyToProject = async (req, res) => {
   try {
     const { projectId, applicationType, members } = req.body;
@@ -22,7 +23,7 @@ export const applyToProject = async (req, res) => {
     // Auto-assign priority
     const priority = existingApps.length === 0 ? 1 : 2;
 
-    // Prevent duplicate priority (just in case)
+    // Prevent duplicate priority
     if (existingApps.some((a) => a.priority === priority)) {
       return res
         .status(400)
@@ -34,12 +35,18 @@ export const applyToProject = async (req, res) => {
       return res.status(404).json({ message: "Project not found." });
     }
 
+    const leaderCohort = leader.internshipStatus || "regular";
+    const leaderDept = leader.department || "Dept of ECE";
+    let hasCrossBranch = false;
+
     // Build members list
     const memberList = [
       {
         studentId: leader._id,
         name: leader.fullName,
         regNo: leader.regNo || "N/A",
+        department: leaderDept,
+        internshipStatus: leaderCohort,
         status: "approved",
       },
     ];
@@ -53,7 +60,13 @@ export const applyToProject = async (req, res) => {
       }
 
       for (const member of members) {
-        const memberUser = await User.findOne({ regNo: member.regNo });
+        const memberUser = await User.findOne({
+          $or: [
+            { regNo: member.regNo },
+            { _id: member.studentId },
+          ],
+        });
+
         if (!memberUser) {
           return res.status(404).json({
             message: `Student with Reg No "${member.regNo}" not found.`,
@@ -70,10 +83,26 @@ export const applyToProject = async (req, res) => {
           });
         }
 
+        // ⚡ DYNAMIC INTERNSHIP COHORT CONSTRAINT VALIDATION
+        const memberCohort = memberUser.internshipStatus || "regular";
+        if (memberCohort !== leaderCohort) {
+          return res.status(400).json({
+            message: `Cohort Mismatch: Student ${memberUser.fullName} is on the ${memberCohort === "internship" ? "Corporate Internship" : "Regular"} track, while your team is on the ${leaderCohort === "internship" ? "Corporate Internship" : "Regular"} track. Mixed teams are not allowed.`,
+          });
+        }
+
+        // ⚡ DYNAMIC CROSS-BRANCH DETECTION
+        const memberDept = memberUser.department || "Dept of ECE";
+        if (memberDept !== leaderDept) {
+          hasCrossBranch = true;
+        }
+
         memberList.push({
           studentId: memberUser._id,
           name: memberUser.fullName,
           regNo: memberUser.regNo,
+          department: memberDept,
+          internshipStatus: memberCohort,
           status: "pending",
         });
       }
@@ -82,6 +111,8 @@ export const applyToProject = async (req, res) => {
     const application = new StudentProjectApply({
       projectId,
       applicationType,
+      cohortTrack: leaderCohort,
+      hasCrossBranch,
       members: memberList,
       priority,
       status:
@@ -91,13 +122,6 @@ export const applyToProject = async (req, res) => {
     });
 
     await application.save();
-
-    // 🚨 Only notify faculty if it's priority 1
-    if (priority === 1) {
-      console.log(
-        `Faculty ${project.facultyName} notified about Priority 1 application`
-      );
-    }
 
     res.status(201).json({
       message: `Application for Priority ${priority} submitted successfully!`,
@@ -356,5 +380,123 @@ export const getApplicationsForProject = async (req, res) => {
   } catch (error) {
     console.error("Get Applications Error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// 🔹 Get all applications for the logged-in student
+export const getMyApplications = async (req, res) => {
+  try {
+    const studentId = req.user._id;
+    const applications = await StudentProjectApply.find({
+      "members.studentId": studentId,
+    })
+      .populate("projectId", "projectTitle facultyName domain description vacancies prerequisites")
+      .populate("members.studentId", "fullName email regNo department internshipStatus internshipCompany")
+      .sort({ createdAt: -1 });
+
+    const formatted = applications.map((app) => ({
+      _id: app._id,
+      projectId: app.projectId?._id,
+      projectTitle: app.projectId?.projectTitle || "Capstone Project",
+      facultyName: app.projectId?.facultyName || "Faculty Advisor",
+      priority: app.priority,
+      status: app.status,
+      cohortTrack: app.cohortTrack || "regular",
+      hasCrossBranch: app.hasCrossBranch || false,
+      members: app.members.map((m) => ({
+        studentId: m.studentId?._id || m.studentId,
+        name: m.name,
+        regNo: m.regNo,
+        department: m.department || m.studentId?.department || "Dept of ECE",
+        internshipStatus: m.internshipStatus || m.studentId?.internshipStatus || "regular",
+        status: m.status,
+      })),
+      submittedAt: app.createdAt || app.appliedAt,
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error("Get my applications error:", error);
+    res.status(500).json({ message: "Server error fetching applications", error: error.message });
+  }
+};
+
+// 🔹 Raise a team member modification ticket
+export const raiseTicket = async (req, res) => {
+  try {
+    const { applicationId, projectTitle, facultyName, targetMember, changeType, requestedChanges, reason } = req.body;
+    const studentId = req.user._id;
+
+    if (!applicationId || !targetMember || !changeType || !reason) {
+      return res.status(400).json({ message: "All required ticket fields must be provided." });
+    }
+
+    const ticketId = "TCK-" + Math.floor(1000 + Math.random() * 9000);
+
+    const newTicket = new Ticket({
+      ticketId,
+      applicationId,
+      studentId,
+      projectTitle: projectTitle || "Capstone Project",
+      facultyName: facultyName || "Faculty Guide",
+      targetMember,
+      changeType,
+      requestedChanges,
+      reason,
+      status: "pending",
+      progressStep: 1,
+      timeline: [
+        {
+          step: "Submitted",
+          date: new Date(),
+          message: "Ticket created and dispatched to Department Coordinator.",
+        },
+      ],
+    });
+
+    await newTicket.save();
+
+    res.status(201).json({
+      message: `Ticket #${ticketId} submitted successfully! Your departmental coordinator will review the request.`,
+      ticket: newTicket,
+    });
+  } catch (error) {
+    console.error("Raise ticket error:", error);
+    res.status(500).json({ message: "Server error raising ticket", error: error.message });
+  }
+};
+
+// 🔹 Get all change tickets for the logged-in student
+export const getStudentTickets = async (req, res) => {
+  try {
+    const studentId = req.user._id;
+    const tickets = await Ticket.find({ studentId }).sort({ createdAt: -1 });
+    res.status(200).json(tickets);
+  } catch (error) {
+    console.error("Get student tickets error:", error);
+    res.status(500).json({ message: "Server error fetching tickets", error: error.message });
+  }
+};
+
+// 🔹 Cancel a change ticket
+export const cancelTicket = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const studentId = req.user._id;
+
+    const ticket = await Ticket.findOne({
+      $or: [{ _id: ticketId }, { ticketId: ticketId }],
+      studentId,
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found or unauthorized." });
+    }
+
+    await Ticket.findByIdAndDelete(ticket._id);
+    res.status(200).json({ message: "Ticket cancelled successfully." });
+  } catch (error) {
+    console.error("Cancel ticket error:", error);
+    res.status(500).json({ message: "Server error cancelling ticket", error: error.message });
   }
 };

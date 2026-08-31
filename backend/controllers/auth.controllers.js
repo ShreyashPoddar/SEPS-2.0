@@ -158,6 +158,8 @@ export const updateProfile = async (req, res) => {
   const { 
     profilePic, 
     department, 
+    internshipStatus,
+    internshipCompany,
     skills, 
     resumeUrl, 
     experience, 
@@ -170,7 +172,9 @@ export const updateProfile = async (req, res) => {
 
     const updatedFields = {};
   if (profilePic) updatedFields.profilePic = profilePic;
-  if (department) updatedFields.department = department;
+  if (department !== undefined) updatedFields.department = department;
+  if (internshipStatus !== undefined) updatedFields.internshipStatus = internshipStatus;
+  if (internshipCompany !== undefined) updatedFields.internshipCompany = internshipCompany;
   if (skills) updatedFields.skills = skills;
   if (resumeUrl) updatedFields.resumeUrl = resumeUrl;
   if (cgpa !== undefined) updatedFields.cgpa = cgpa;
