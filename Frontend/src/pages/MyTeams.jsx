@@ -33,8 +33,9 @@ export default function MyTeams() {
     setLoading(true);
     getApprovedTeams()
       .then((res) => {
-        const filteredTeams = res.data.teams.filter(
-          (team) => team.facultyName === currentUser.fullName
+        const rawTeams = Array.isArray(res.data) ? res.data : (res.data?.teams || []);
+        const filteredTeams = rawTeams.filter(
+          (team) => team.facultyName === currentUser.fullName || team.facultyId === currentUser._id
         );
         setMyTeams(filteredTeams);
       })

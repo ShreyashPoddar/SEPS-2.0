@@ -38,11 +38,15 @@ export default function TeacherApplications() {
     setLoading(true);
     getApplicationsForProject(id)
       .then((res) => {
-        // Filter applications to only show those awaiting a decision
-        const readyForReview = res.data.applications.filter(
-          (app) => app.status === "pending_faculty_approval"
+        const rawApps = Array.isArray(res.data) ? res.data : (res.data?.applications || []);
+        const readyForReview = rawApps.filter(
+          (app) => app.status === "pending_faculty_approval" || app.status === "pending"
         );
-        setData({ ...res.data, applications: readyForReview });
+        setData({
+          ...(typeof res.data === "object" && !Array.isArray(res.data) ? res.data : {}),
+          project: res.data?.project || { projectTitle: "Project Applications" },
+          applications: readyForReview,
+        });
       })
       .catch((err) => {
         console.error(err);

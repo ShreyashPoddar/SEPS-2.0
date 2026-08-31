@@ -28,14 +28,16 @@ export default function Signup() {
     setLoading(true);
 
     const dataToSend = {
-      fullName: formData.fullName,
-      email: formData.email,
+      fullName: formData.fullName.trim(),
+      email: formData.email.trim().toLowerCase(),
       password: formData.password,
       role: formData.role,
     };
 
     if (formData.role === "student") {
-      dataToSend.regNo = formData.regNo;
+      dataToSend.regNo = formData.regNo.trim().toUpperCase();
+      dataToSend.department = formData.department || "Dept of ECE";
+      dataToSend.internshipStatus = formData.internshipStatus || "regular";
     }
 
     toast.promise(
@@ -155,20 +157,58 @@ export default function Signup() {
           </div>
 
           {formData.role === "student" && (
-            <div>
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                SRM Registration Number
-              </label>
-              <input
-                type="text"
-                name="regNo"
-                placeholder="e.g. RA2111003010123"
-                value={formData.regNo}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  SRM Registration Number
+                </label>
+                <input
+                  type="text"
+                  name="regNo"
+                  placeholder="e.g. RA2111003010123"
+                  value={formData.regNo}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium uppercase font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Department
+                </label>
+                <select
+                  name="department"
+                  value={formData.department || "Dept of ECE"}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+                >
+                  <option value="Dept of ECE">Dept of Electronics & Communication Engg (ECE)</option>
+                  <option value="Dept of CSE">Dept of Computer Science & Engg (CSE)</option>
+                  <option value="Dept of IT">Dept of Information Technology (IT)</option>
+                  <option value="Dept of Mechanical">Dept of Mechanical Engineering</option>
+                  <option value="Dept of Mechatronics">Dept of Mechatronics Engineering</option>
+                  <option value="Dept of Electrical & Electronics">Dept of Electrical & Electronics Engg (EEE)</option>
+                  <option value="Dept of Civil">Dept of Civil Engineering</option>
+                  <option value="Dept of Biotech">Dept of Biotechnology</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Capstone Internship Track
+                </label>
+                <select
+                  name="internshipStatus"
+                  value={formData.internshipStatus || "regular"}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+                >
+                  <option value="regular">🎓 Regular On-Campus Capstone Project</option>
+                  <option value="internship">💼 6-Month Corporate Internship Track</option>
+                </select>
+              </div>
+            </>
           )}
 
           <div>
@@ -193,7 +233,7 @@ export default function Signup() {
             <input
               type="password"
               name="password"
-              placeholder="Create a secure password"
+              placeholder="Create a secure password (min. 6 chars)"
               value={formData.password}
               onChange={handleChange}
               className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"

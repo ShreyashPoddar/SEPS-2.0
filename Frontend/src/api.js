@@ -194,28 +194,41 @@ export const signupUser = (data) =>
 
 export const loginUser = (data) =>
   withFallback(
-    () => API.post("/auth/login", data),
+    () => API.post("/auth/login", {
+      identifier: data.identifier || data.email || data.regNo,
+      email: data.email || data.identifier,
+      password: data.password,
+    }),
     () => {
+      const loginKey = (data.identifier || data.email || data.regNo || "").toLowerCase();
       const isTeacher =
-        data.email?.toLowerCase().includes("teacher") ||
-        data.email?.toLowerCase().includes("faculty") ||
-        data.email?.toLowerCase().includes("sangeetm") ||
-        data.email?.toLowerCase().includes("vadivukk") ||
-        data.email?.toLowerCase().includes("elavelvg") ||
-        data.email?.toLowerCase().includes("prof");
+        loginKey.includes("teacher") ||
+        loginKey.includes("faculty") ||
+        loginKey.includes("sangeetm") ||
+        loginKey.includes("vadivukk") ||
+        loginKey.includes("elavelvg") ||
+        loginKey.includes("prof");
 
-      const user = {
-        _id: isTeacher ? "t1" : "s1",
-        fullName: isTeacher ? "Dr. M. Sangeetha" : (data.email?.split("@")[0] || "Demo Student"),
-        email: data.email || (isTeacher ? "sangeetm@srmist.edu.in" : "student@srmist.edu.in"),
-        regNo: isTeacher ? undefined : "RA2111003010123",
-        role: isTeacher ? "teacher" : "student",
-        isVerified: true,
-        department: "Dept of ECE",
-        domain: isTeacher ? "Robotics and Automation" : "Embedded Systems and IoT",
-        experience: isTeacher ? 12 : undefined,
-        description: isTeacher ? "Professor & Department Coordinator" : "Final Year B.Tech ECE Student",
-      };
+      const matchedMock = mockStudents.find(
+        (s) => s.regNo.toLowerCase() === loginKey || s.email.toLowerCase() === loginKey
+      );
+
+      const user = matchedMock
+        ? { ...matchedMock, isVerified: true }
+        : {
+            _id: isTeacher ? "t1" : "s1",
+            fullName: isTeacher ? "Dr. M. Sangeetha" : (data.email?.split("@")[0] || loginKey.toUpperCase() || "SRM Student"),
+            email: data.email || (isTeacher ? "sangeetm@srmist.edu.in" : `${loginKey.toLowerCase()}@srmist.edu.in`),
+            regNo: isTeacher ? undefined : (data.regNo || (loginKey.startsWith("ra") ? loginKey.toUpperCase() : "RA2111003010123")),
+            role: isTeacher ? "teacher" : "student",
+            isVerified: true,
+            department: "Dept of ECE",
+            internshipStatus: "regular",
+            internshipCompany: "",
+            domain: isTeacher ? "Robotics and Automation" : "Embedded Systems and IoT",
+            experience: isTeacher ? 12 : undefined,
+            description: isTeacher ? "Professor & Department Coordinator" : "Final Year B.Tech ECE Student",
+          };
       setStoredUser(user);
       return { message: "Login successful!", user };
     }
@@ -232,8 +245,11 @@ export const logoutUser = () =>
 
 export const forgotPassword = (data) =>
   withFallback(
-    () => API.post("/auth/forgot-password", data),
-    () => ({ message: `Password reset link has been sent to ${data.email}` })
+    () => API.post("/auth/forgot-password", {
+      identifier: data.identifier || data.email || data.regNo,
+      email: data.email || data.identifier,
+    }),
+    () => ({ message: `Password reset link has been dispatched for ${data.identifier || data.email || "your account"}.` })
   );
 
 export const getCurrentUser = () =>

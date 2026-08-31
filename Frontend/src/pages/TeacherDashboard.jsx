@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   logoutUser,
   getTeacherProjects,
+  getGlobalDeadline,
 } from "../api";
 import { useNavigate } from "react-router-dom";
 import {
@@ -55,7 +56,7 @@ export default function TeacherDashboard() {
     domain: "",
   });
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
 
@@ -70,7 +71,7 @@ export default function TeacherDashboard() {
   const loadProjectsForCurrentUser = useCallback(() => {
     getTeacherProjects()
       .then((res) => {
-        setProjects(res.data);
+        setProjects(Array.isArray(res.data) ? res.data : (res.data?.projects || []));
       })
       .catch((err) => {
         console.error("Error loading projects:", err);
@@ -96,17 +97,15 @@ export default function TeacherDashboard() {
   }, [navigate, loadProjectsForCurrentUser]);
 
   useEffect(() => {
-    import("../api").then(({ getGlobalDeadline }) => {
-      getGlobalDeadline()
-        .then((res) => {
-          if (res.data.deadline) {
-            setGlobalDeadline(
-              new Date(res.data.deadline).toLocaleDateString()
-            );
-          }
-        })
-        .catch(() => setGlobalDeadline(""));
-    });
+    getGlobalDeadline()
+      .then((res) => {
+        if (res.data?.deadline) {
+          setGlobalDeadline(
+            new Date(res.data.deadline).toLocaleDateString()
+          );
+        }
+      })
+      .catch(() => setGlobalDeadline(""));
   }, []);
 
   const handleUpload = (e) => {

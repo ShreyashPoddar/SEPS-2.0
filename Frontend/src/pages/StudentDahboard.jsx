@@ -72,8 +72,9 @@ export default function StudentDashboard() {
 
     getAllProjects()
       .then((res) => {
-        setProjects(res.data || []);
-        setFilteredProjects(res.data || []);
+        const list = Array.isArray(res.data) ? res.data : (res.data?.projects || []);
+        setProjects(list);
+        setFilteredProjects(list);
       })
       .catch(() => toast.error("Could not load available projects."));
 
@@ -94,10 +95,11 @@ export default function StudentDashboard() {
     let filtered = projects;
 
     if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter((p) =>
-        p.projectTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.facultyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.domain.toLowerCase().includes(searchQuery.toLowerCase())
+        (p.projectTitle || "").toLowerCase().includes(q) ||
+        (p.facultyName || "").toLowerCase().includes(q) ||
+        (p.domain || "").toLowerCase().includes(q)
       );
     }
 

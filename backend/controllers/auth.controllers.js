@@ -5,8 +5,21 @@ import { sendWelcomeEmail, sendVerificationEmail, sendResetEmail } from "../lib/
 import crypto from "crypto";
 
 export const signup = async (req, res) => {
-  // Add 'regNo' to the destructuring
-  const { fullName, email, password, role, regNo, experience, description, researchPast } = req.body;
+  const {
+    fullName,
+    email,
+    password,
+    role,
+    regNo,
+    department,
+    internshipStatus,
+    internshipCompany,
+    cgpa,
+    skills,
+    experience,
+    description,
+    researchPast,
+  } = req.body;
 
   try {
     if (!fullName || !email || !password || !role) {
@@ -23,14 +36,14 @@ export const signup = async (req, res) => {
         return res.status(400).json({ message: "Registration number is required for students." });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
     
     // Check if regNo is already in use
     if (role.toLowerCase() === 'student') {
-        const existingRegNo = await User.findOne({ regNo });
+        const existingRegNo = await User.findOne({ regNo: regNo.toUpperCase() });
         if (existingRegNo) {
             return res.status(400).json({ message: "Registration number already exists." });
         }
@@ -45,8 +58,13 @@ export const signup = async (req, res) => {
 
     const newUser = await User.create({
       fullName,
-      email,
-      regNo: role.toLowerCase() === 'student' ? regNo : undefined, // Only save regNo for students
+      email: email.toLowerCase(),
+      regNo: role.toLowerCase() === 'student' ? regNo.toUpperCase() : undefined,
+      department: department || "Dept of ECE",
+      internshipStatus: internshipStatus || "regular",
+      internshipCompany: internshipCompany || "",
+      cgpa: cgpa || 0,
+      skills: skills || [],
       password: hashedPassword,
       role: role.toLowerCase(),
       experience,
@@ -86,14 +104,21 @@ export const signup = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const { email, identifier, regNo } = req.body;
+  const loginId = (identifier || email || regNo || "").trim();
 
-  if (!email) return res.status(400).json({ message: "Email is required" });
+  if (!loginId) return res.status(400).json({ message: "Email or Register Number is required" });
   
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      $or: [
+        { email: loginId.toLowerCase() },
+        { regNo: loginId.toUpperCase() },
+        { regNo: loginId },
+      ],
+    });
     if (!user) {
-        return res.status(200).json({ message: "If a user with that email exists, a reset link has been sent." });
+        return res.status(200).json({ message: "If a user with that identifier exists, a reset link has been sent." });
     }
     
     const rawToken = crypto.randomBytes(32).toString("hex");
@@ -104,7 +129,7 @@ export const forgotPassword = async (req, res) => {
     await user.save();
     
     await sendResetEmail(user.email, user.fullName, rawToken);
-    res.status(200).json({ message: "If a user with that email exists, a reset link has been sent." });
+    res.status(200).json({ message: "If a user with that identifier exists, a reset link has been sent." });
 
   } catch (err) {
     console.error("❌ Error in forgotPassword controller:", err.message);
@@ -113,9 +138,22 @@ export const forgotPassword = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, identifier, regNo, password } = req.body;
+  const loginId = (identifier || email || regNo || "").trim();
+
+  if (!loginId || !password) {
+    return res.status(400).json({ message: "Email / Register Number and Password are required" });
+  }
+
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      $or: [
+        { email: loginId.toLowerCase() },
+        { regNo: loginId.toUpperCase() },
+        { regNo: loginId },
+      ],
+    });
+
     if (!user)
       return res.status(400).json({ message: "Invalid credentials" });
 
@@ -133,7 +171,10 @@ export const login = async (req, res) => {
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
+      regNo: user.regNo,
       role: user.role,
+      department: user.department,
+      internshipStatus: user.internshipStatus,
       profilePic: user.profilePic || null,
     });
 

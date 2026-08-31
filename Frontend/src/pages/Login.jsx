@@ -7,7 +7,7 @@ import SlicedWaves from "../components/SlicedWaves";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
 
 export default function Login() {
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({ identifier: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,7 +20,12 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await loginUser(formData);
+      const loginPayload = {
+        identifier: formData.identifier.trim(),
+        email: formData.identifier.trim(),
+        password: formData.password,
+      };
+      await loginUser(loginPayload);
       const { data } = await getCurrentUser();
       if (data.role === "teacher") {
         navigate("/teacher-dashboard");
@@ -109,13 +114,14 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Email / Register No.
+              Email Address / SRM Register No.
             </label>
             <input
-              type="email"
-              name="email"
-              placeholder="Enter your email address"
+              type="text"
+              name="identifier"
+              placeholder="e.g. yourname@srmist.edu.in or RA2111..."
               className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+              value={formData.identifier}
               onChange={handleChange}
               required
             />
@@ -130,6 +136,7 @@ export default function Login() {
               name="password"
               placeholder="Enter your password"
               className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+              value={formData.password}
               onChange={handleChange}
               required
             />
