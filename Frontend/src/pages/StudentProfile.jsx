@@ -102,12 +102,52 @@ export default function StudentProfile() {
                 <input type="number" name="cgpa" value={profile.cgpa ?? ""} min={0} max={10} step={0.01} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
               </div>
                <div>
-                <label className="text-sm font-medium text-gray-600">Department</label>
-                <input type="text" name="department" value={profile.department || ""} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
+                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Department / Branch</label>
+                <select
+                  name="department"
+                  value={profile.department || "Dept of ECE"}
+                  onChange={handleChange}
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                >
+                  <option value="Dept of ECE">Dept of ECE (Electronics & Communication)</option>
+                  <option value="Dept of CSE">Dept of CSE (Computer Science)</option>
+                  <option value="Dept of IT">Dept of IT (Information Technology)</option>
+                  <option value="Dept of Mechanical">Dept of Mechanical Engineering</option>
+                  <option value="Dept of Biomedical">Dept of Biomedical Engineering</option>
+                  <option value="Dept of EEE">Dept of EEE (Electrical & Electronics)</option>
+                </select>
               </div>
+
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Capstone Internship Track</label>
+                <select
+                  name="internshipStatus"
+                  value={profile.internshipStatus || "regular"}
+                  onChange={handleChange}
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                >
+                  <option value="regular">🎓 Regular On-Campus Capstone Track</option>
+                  <option value="internship">💼 6-Month Corporate Internship Track</option>
+                </select>
+              </div>
+
+              {profile.internshipStatus === "internship" && (
+                <div className="md:col-span-2">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-amber-900">Internship Corporate Host / Company</label>
+                  <input
+                    type="text"
+                    name="internshipCompany"
+                    value={profile.internshipCompany || ""}
+                    placeholder="e.g. Qualcomm, Amazon AWS, Intel, Texas Instruments"
+                    onChange={handleChange}
+                    className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-amber-50/50 border-2 border-amber-300 rounded-xl focus:outline-none focus:border-amber-900 transition font-medium text-sm"
+                  />
+                </div>
+              )}
+
               <div className="md:col-span-2">
-                <label className="text-sm font-medium text-gray-600">Profile Picture URL</label>
-                <input type="text" name="profilePic" value={profile.profilePic || ""} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
+                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Profile Picture URL</label>
+                <input type="text" name="profilePic" value={profile.profilePic || ""} onChange={handleChange} className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium" />
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-medium text-gray-600">Skills (comma-separated)</label>

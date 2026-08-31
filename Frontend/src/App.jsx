@@ -4,7 +4,8 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import InaugurationHome from "./pages/InaugurationHome.jsx";
+import LandingPage from "./pages/LandingPage.jsx";
+import AboutPage from "./pages/AboutPage.jsx";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -21,13 +22,13 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 import StatisticsReport from "./pages/StatisticsReport.jsx";
 import { useEffect, useState } from "react";
 
+import { getCurrentUser } from "./api";
+
 // Wrapper to inject user prop from getCurrentUser API
 function SetGlobalDeadlineWrapper() {
   const [user, setUser] = useState(null);
   useEffect(() => {
-    import("./api").then(({ getCurrentUser }) => {
-      getCurrentUser().then(res => setUser(res.data)).catch(() => setUser(null));
-    });
+    getCurrentUser().then(res => setUser(res.data)).catch(() => setUser(null));
   }, []);
   return <SetGlobalDeadline user={user} />;
 }
@@ -36,8 +37,8 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<InaugurationHome />} />
-        <Route path="/inauguration" element={<InaugurationHome />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

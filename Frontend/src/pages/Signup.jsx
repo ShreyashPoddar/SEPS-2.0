@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { signupUser } from "../api.js";
 import { toast, Toaster } from "react-hot-toast";
-import { UserPlus } from "lucide-react";
-import srmLogo from '../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png'; // 🖼️ IMPORT YOUR LOGO HERE
+import { UserPlus, ArrowLeft } from "lucide-react";
+import SlicedWaves from "../components/SlicedWaves";
+import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -32,14 +34,14 @@ export default function Signup() {
       role: formData.role,
     };
 
-    if (formData.role === 'student') {
+    if (formData.role === "student") {
       dataToSend.regNo = formData.regNo;
     }
 
     toast.promise(
       signupUser(dataToSend),
       {
-        loading: 'Creating your account...',
+        loading: "Creating your account...",
         success: (res) => {
           setTimeout(() => navigate("/login"), 2000);
           return res.data.message || "Signup successful! Please verify your email.";
@@ -50,66 +52,176 @@ export default function Signup() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 p-4">
+    <div className="relative min-h-screen w-full bg-white text-slate-900 flex items-center justify-center p-4 overflow-hidden selection:bg-blue-600 selection:text-white">
       <Toaster position="top-right" />
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-2xl">
+
+      {/* SlicedWaves Background */}
+      <div className="fixed inset-0 w-full h-full z-0 pointer-events-auto">
+        <SlicedWaves
+          color1="#ffea43"
+          color2="#007dff"
+          color3="#0f001e"
+          columns={14}
+          rows={8}
+          barThickness={0.1}
+          speed={0.35}
+          travel={0.7}
+          waveSpread={0.9}
+          rowOffset={1}
+          softness={0.05}
+          glow={0}
+          brightness={1}
+          contrast={1}
+          opacity={0.4}
+          orientation="horizontal"
+          alternate={false}
+          grain
+          grainIntensity={0.05}
+          mouseInteraction
+          mouseStrength={1}
+          mouseRadius={0.3}
+        />
+      </div>
+
+      {/* Back to Home Button */}
+      <div className="fixed top-6 left-6 z-20">
+        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 hover:bg-white backdrop-blur-xl border-2 border-black text-xs sm:text-sm font-bold text-slate-900 shadow-md transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Home</span>
+          </Link>
+        </motion.div>
+      </div>
+
+      {/* Glassmorphic Signup Card */}
+      <motion.div
+        className="relative z-10 w-full max-w-md p-8 space-y-5 bg-white/85 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl border-2 border-black shadow-[0_12px_40px_rgba(0,0,0,0.1)] my-8"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+      >
         <div className="text-center">
-          {/* 🖼️ Use the imported logo variable here */}
-          <img 
-            src={srmLogo} 
-            alt="College Logo" 
-            className="mx-auto mb-4 h-12" 
-          />
-          <h1 className="text-2xl font-bold text-gray-800">
+          <Link to="/" className="inline-flex items-center justify-center gap-2.5 mb-3 group">
+            <img
+              src={srmLogo}
+              alt="SRM IST Logo"
+              className="h-9 w-auto object-contain transition group-hover:scale-105"
+            />
+            <span className="text-slate-400 font-light text-xl select-none">|</span>
+            <span className="font-extrabold text-2xl text-slate-950 tracking-tight">
+              SEPS 2.0
+            </span>
+          </Link>
+          <h1 className="text-2xl font-extrabold text-slate-950 tracking-tight">
             Create an Account
           </h1>
-          <p className="text-gray-500">Join the Project Connect Portal</p>
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
+            Join the SRM Project Connect Portal
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="text-sm font-medium text-gray-600">I am a...</label>
-            <select name="role" value={formData.role} onChange={handleChange} className="w-full px-4 py-2 mt-1 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Account Role
+            </label>
+            <select
+              name="role"
+              value={formData.role}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+            >
               <option value="student">Student</option>
-              <option value="teacher">Teacher</option>
+              <option value="teacher">Faculty / Teacher</option>
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-gray-600">Full Name</label>
-            <input type="text" name="fullName" placeholder="Enter your full name" value={formData.fullName} onChange={handleChange} className="w-full px-4 py-2 mt-1 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" required />
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Full Name
+            </label>
+            <input
+              type="text"
+              name="fullName"
+              placeholder="Enter your full name"
+              value={formData.fullName}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+              required
+            />
           </div>
 
-          {formData.role === 'student' && (
+          {formData.role === "student" && (
             <div>
-              <label className="text-sm font-medium text-gray-600">Registration Number</label>
-              <input type="text" name="regNo" placeholder="Enter your registration number" value={formData.regNo} onChange={handleChange} className="w-full px-4 py-2 mt-1 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" required />
+              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                SRM Registration Number
+              </label>
+              <input
+                type="text"
+                name="regNo"
+                placeholder="e.g. RA2111003010123"
+                value={formData.regNo}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+                required
+              />
             </div>
           )}
 
           <div>
-            <label className="text-sm font-medium text-gray-600">Email Address</label>
-            <input type="email" name="email" placeholder="Enter your email" value={formData.email} onChange={handleChange} className="w-full px-4 py-2 mt-1 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" required />
-          </div>
-          
-          <div>
-            <label className="text-sm font-medium text-gray-600">Password</label>
-            <input type="password" name="password" placeholder="Create a password" value={formData.password} onChange={handleChange} className="w-full px-4 py-2 mt-1 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" required minLength={6} />
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Email Address
+            </label>
+            <input
+              type="email"
+              name="email"
+              placeholder="Enter your university email"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+              required
+            />
           </div>
 
-          <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 py-3 px-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50">
-            {loading ? 'Creating Account...' : 'Sign Up'}
-            {!loading && <UserPlus size={18} />}
-          </button>
+          <div>
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Password
+            </label>
+            <input
+              type="password"
+              name="password"
+              placeholder="Create a secure password"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {/* Framer Motion Submit Button */}
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full flex justify-center items-center gap-2 py-3 px-4 bg-slate-950 hover:bg-slate-800 text-white font-bold rounded-full border-2 border-black shadow-lg shadow-black/10 transition active:scale-95 disabled:opacity-50 text-sm mt-2"
+          >
+            {loading ? "Creating Account..." : "Create Account"}
+            {!loading && <UserPlus size={16} />}
+          </motion.button>
         </form>
 
-        <p className="text-sm text-center text-gray-600">
+        <p className="text-xs text-center text-slate-600 font-semibold pt-2 border-t border-slate-200/80">
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-cyan-600 hover:underline">
+          <Link to="/login" className="text-black font-extrabold hover:underline">
             Login
           </Link>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }

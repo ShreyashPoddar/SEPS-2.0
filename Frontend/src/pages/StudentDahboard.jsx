@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   getAllProjects,
-  applyToProject,
   getCurrentUser,
   logoutUser,
-  searchStudents,
   getPendingInvitations,
+  getGlobalDeadline
 } from "../api";
 import { useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
@@ -15,258 +14,16 @@ import {
   CheckCircle,
   Search,
   Users,
-  User,
-  X,
-  Loader,
+  Briefcase,
+  GraduationCap,
+  Sparkles,
+  Calendar,
+  Building2,
+  Filter
 } from "lucide-react";
 import Navbar from "../components/Navbar";
-
-// Custom hook for debouncing input to reduce API calls
-const useDebounce = (value, delay) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-  return debouncedValue;
-};
-
-// ApplyModal with live search functionality
-const ApplyModal = ({ project, onClose, onApply }) => {
-  const [applicationType] = useState("group");
-  const [members, setMembers] = useState([
-    { name: "", regNo: "" },
-    { name: "", regNo: "" },
-  ]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // State for the live search
-
-  const [searchQueries, setSearchQueries] = useState(["", ""]);
-  const [searchResults, setSearchResults] = useState([[], []]);
-  const [searchLoading, setSearchLoading] = useState([false, false]);
-  const [activeIndex, setActiveIndex] = useState(null); // To control which dropdown is visible
-
-  const debouncedSearchQueries = useDebounce(searchQueries, 300);
-
-  useEffect(() => {
-    const performSearch = async (index) => {
-      const query = debouncedSearchQueries[index];
-      if (query.length < 2) {
-        setSearchResults((prev) => {
-          const next = [...prev];
-          next[index] = [];
-          return next;
-        });
-        return;
-      }
-      setSearchLoading((prev) => {
-        const next = [...prev];
-        next[index] = true;
-        return next;
-      });
-      try {
-        const res = await searchStudents(query);
-        setSearchResults((prev) => {
-          const next = [...prev];
-          next[index] = res.data;
-          return next;
-        });
-      } catch (error) {
-        console.error("Search failed:", error);
-        toast.error("Failed to search for students.");
-      } finally {
-        setSearchLoading((prev) => {
-          const next = [...prev];
-          next[index] = false;
-          return next;
-        });
-      }
-    };
-
-    debouncedSearchQueries.forEach((query, index) => {
-      performSearch(index);
-    });
-  }, [debouncedSearchQueries]);
-
-  const handleSearchChange = (index, value) => {
-    const updatedQueries = [...searchQueries];
-    updatedQueries[index] = value;
-    setSearchQueries(updatedQueries);
-
-    const updatedMembers = [...members];
-    updatedMembers[index] = { name: value, regNo: "" }; // reset
-    setMembers(updatedMembers);
-    setActiveIndex(index);
-
-    if (value.length >= 8) {
-      fetchStudentByRegNo(index, value);
-    }
-  };
-
-  const handleSelectStudent = (memberIndex, student) => {
-    const updatedMembers = [...members];
-    updatedMembers[memberIndex] = {
-      name: student.fullName,
-      regNo: student.regNo || "N/A",
-    };
-    setMembers(updatedMembers);
-
-    const updatedQueries = [...searchQueries];
-    updatedQueries[memberIndex] = student.regNo;
-
-    setActiveIndex(null);
-  };
-
-  const fetchStudentByRegNo = async (index, regNo) => {
-    try {
-      const res = await searchStudents(regNo);
-      if (
-        res.data.length === 1 &&
-        res.data[0].regNo.toLowerCase() === regNo.toLowerCase()
-      ) {
-        const student = res.data[0];
-        const updatedMembers = [...members];
-        updatedMembers[index] = {
-          name: student.fullName,
-          regNo: student.regNo,
-        };
-        setMembers(updatedMembers);
-      }
-    } catch (error) {
-      console.error("Exact regNo search failed:", error);
-    }
-  };
-
-  const handleSubmit = async () => {
-    for (const member of members) {
-      if (
-        !member.name.trim() ||
-        !member.regNo.trim() ||
-        member.regNo === "N/A"
-      ) {
-        toast.error("Please select valid teammates from the search results.");
-        return;
-      }
-    }
-    setIsSubmitting(true);
-    const applicationData = {
-      projectId: project._id,
-      applicationType: "group",
-      members,
-    };
-
-    toast
-      .promise(applyToProject(applicationData), {
-        loading: "Submitting application...",
-        success: (res) => {
-          onApply(project._id);
-          onClose();
-          return res.data.message || "Success!";
-        },
-        error: (err) => err.response?.data?.message || "Application failed.",
-      })
-      .finally(() => setIsSubmitting(false));
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 md:p-8 shadow-xl max-w-lg w-full border border-slate-200 text-gray-800">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-800">
-            Apply to: {project.projectTitle}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-800"
-          >
-            <X size={28} />
-          </button>
-        </div>
-        <div className="flex gap-4 mb-6">
-          <button
-            className="flex-1 p-3 rounded-lg flex items-center justify-center gap-2 bg-cyan-600 text-white cursor-not-allowed"
-            disabled
-          >
-            <Users /> Group (3 members)
-          </button>
-        </div>
-        {applicationType === "group" && (
-          <div className="space-y-4 mb-6">
-            <p className="text-sm text-gray-600">
-              You are the group leader. Search for your 2 teammates by their
-              registration number.
-            </p>
-            {[0, 1].map((index) => (
-              <div
-                key={index}
-                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-              >
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder={`Enter Teammate ${index + 1} Reg. No.`}
-                    value={searchQueries[index]}
-                    onChange={(e) => handleSearchChange(index, e.target.value)}
-                    className="w-full px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition"
-                  />
-                  {activeIndex === index && searchQueries[index].length > 1 && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-300 rounded-lg z-10 max-h-40 overflow-y-auto shadow-lg">
-                      {searchLoading[index] && (
-                        <div className="p-3 text-gray-500 flex items-center gap-2">
-                          <Loader className="animate-spin w-4 h-4" />{" "}
-                          Searching...
-                        </div>
-                      )}
-                      {!searchLoading[index] &&
-                        searchResults[index].length === 0 && (
-                          <div className="p-3 text-gray-500">
-                            No students found.
-                          </div>
-                        )}
-                      {searchResults[index].map((student) => (
-                        <div
-                          key={student._id}
-                          onClick={() => handleSelectStudent(index, student)}
-                          className="p-3 hover:bg-slate-100 cursor-pointer"
-                        >
-                          <p className="font-semibold text-gray-800">
-                            {student.fullName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {student.regNo}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Student Name"
-                  value={members[index].name}
-                  readOnly
-                  className="w-full px-4 py-2 bg-slate-200 border border-slate-300 rounded-lg text-gray-500 cursor-not-allowed"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50"
-        >
-          {isSubmitting ? "Submitting..." : "Confirm Application"}
-        </button>
-      </div>
-    </div>
-  );
-};
+import ApplyModal from "../components/ApplyModal";
+import TicketTrackerWidget from "../components/TicketTrackerWidget";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -297,14 +54,14 @@ export default function StudentDashboard() {
 
   const fetchInvitations = useCallback(() => {
     getPendingInvitations()
-      .then((res) => setInvitations(res.data))
+      .then((res) => setInvitations(res.data || []))
       .catch((err) => console.error("Failed to fetch invitations:", err));
   }, []);
 
   useEffect(() => {
-  getCurrentUser()
+    getCurrentUser()
       .then((res) => {
-        if (res.data.role !== "student") {
+        if (res.data?.role !== "student") {
           navigate("/teacher-dashboard");
         } else {
           setUser(res.data);
@@ -315,17 +72,22 @@ export default function StudentDashboard() {
 
     getAllProjects()
       .then((res) => {
-        setProjects(res.data);
-        setFilteredProjects(res.data);
+        setProjects(res.data || []);
+        setFilteredProjects(res.data || []);
       })
       .catch(() => toast.error("Could not load available projects."));
-    import("../api").then(({ getGlobalDeadline }) => {
-      getGlobalDeadline().then(res => {
-        if (res.data.deadline) {
-          setGlobalDeadline(new Date(res.data.deadline).toLocaleDateString());
+
+    getGlobalDeadline()
+      .then((res) => {
+        if (res.data?.deadline) {
+          setGlobalDeadline(new Date(res.data.deadline).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric"
+          }));
         }
-      }).catch(() => setGlobalDeadline(""));
-    });
+      })
+      .catch(() => setGlobalDeadline(""));
   }, [navigate, fetchInvitations]);
 
   useEffect(() => {
@@ -333,7 +95,9 @@ export default function StudentDashboard() {
 
     if (searchQuery.trim()) {
       filtered = filtered.filter((p) =>
-        p.projectTitle.toLowerCase().includes(searchQuery.toLowerCase())
+        p.projectTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.facultyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.domain.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -366,24 +130,16 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-gray-800">
-      {user && (
-        <div className="max-w-2xl mx-auto mt-6 mb-2 text-center">
-          <span className="text-2xl font-bold text-cyan-700 drop-shadow">Welcome, {user.fullName || user.name || user.email}</span>
-        </div>
-      )}
-      {globalDeadline && (
-        <div className="max-w-2xl mx-auto mt-6 mb-4 bg-white border border-cyan-200 rounded-lg shadow p-4 text-center">
-          <span className="font-semibold text-cyan-700">Application Deadline:</span>
-          <span className="ml-2 text-gray-800">{globalDeadline}</span>
-        </div>
-      )}
+    <div className="min-h-screen bg-slate-100 text-slate-900 pb-16">
       <Toaster position="top-right" />
+
+      {/* Apply Modal */}
       {selectedProject && (
         <ApplyModal
           project={selectedProject}
+          currentUser={user}
           onClose={() => setSelectedProject(null)}
-          onApply={handleApplySuccess}
+          onApplySuccess={handleApplySuccess}
         />
       )}
 
@@ -394,87 +150,170 @@ export default function StudentDashboard() {
           notificationCount={invitations.length}
         />
 
-        <div className="lg:flex lg:gap-8 mt-6">
-          <aside className="w-full lg:w-64 mb-8 lg:mb-0 bg-white p-4 rounded-xl shadow-lg border border-slate-200 h-fit lg:sticky top-8">
-            <h3 className="text-lg font-bold mb-4 text-gray-700">
-              Filter by Domain
-            </h3>
-            <div className="space-y-2 max-h-[30vh] lg:max-h-[60vh] overflow-y-auto">
-              {domainOptions.map((domain) => (
-                <label
-                  key={domain}
-                  className="flex items-center gap-2 text-sm text-gray-600"
+        {/* Global Deadline Banner */}
+        {globalDeadline && (
+          <div className="mb-8 p-4 rounded-2xl bg-white border-2 border-slate-900 shadow-md flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-slate-950 text-cyan-400">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Centralized Capstone Submission Window
+                </p>
+                <h4 className="text-sm font-extrabold text-slate-950">
+                  Global Project Allocation Deadline: <span className="text-cyan-700">{globalDeadline}</span>
+                </h4>
+              </div>
+            </div>
+
+            {user && (
+              <div className="flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full bg-slate-100 border border-slate-300">
+                <span>{user.department || "Dept of ECE"}</span>
+                <span>•</span>
+                <span>
+                  {user.internshipStatus === "internship" ? "💼 Corporate Internship" : "🎓 Regular On-Campus"}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 🎫 LIVE ROSTER & TICKET TRACKER PORTAL WIDGET */}
+        <TicketTrackerWidget currentUser={user} />
+
+        {/* Available Projects Section with Sidebar Filter */}
+        <div className="lg:flex lg:gap-8 mt-8">
+          {/* Domain Filter Sidebar */}
+          <aside className="w-full lg:w-72 mb-8 lg:mb-0 bg-white p-5 rounded-3xl shadow-lg border-2 border-slate-900 h-fit lg:sticky top-8 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-extrabold text-slate-950 flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-900" />
+                <span>Filter by Domain</span>
+              </h3>
+              {selectedDomains.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDomains([])}
+                  className="text-xs font-bold text-red-600 hover:underline"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedDomains.includes(domain)}
-                    onChange={() => toggleDomain(domain)}
-                    className="accent-cyan-600"
-                  />
-                  {domain}
-                </label>
-              ))}
+                  Reset
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-2 max-h-[40vh] lg:max-h-[60vh] overflow-y-auto pr-1">
+              {domainOptions.map((domain) => {
+                const isSelected = selectedDomains.includes(domain);
+                return (
+                  <label
+                    key={domain}
+                    className={`flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold cursor-pointer transition select-none ${
+                      isSelected
+                        ? "bg-slate-950 text-white font-bold"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleDomain(domain)}
+                      className="accent-cyan-400 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <span className="truncate">{domain}</span>
+                  </label>
+                );
+              })}
             </div>
           </aside>
 
-          <main className="flex-1">
-            <div className="mb-6 flex items-center bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
-              <Search className="w-5 h-5 text-gray-400 mr-2" />
+          {/* Project List */}
+          <main className="flex-1 space-y-6">
+            {/* Search Bar */}
+            <div className="flex items-center bg-white border-2 border-slate-900 rounded-2xl px-4 py-3 shadow-md focus-within:ring-2 focus-within:ring-black transition">
+              <Search className="w-5 h-5 text-slate-400 mr-3" />
               <input
                 type="text"
-                placeholder="Search by project title..."
+                placeholder="Search projects by title, faculty advisor, or keywords..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
+                className="w-full bg-transparent outline-none text-slate-900 placeholder-slate-400 text-sm font-medium"
               />
             </div>
 
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-gray-700">
-              <BookOpen className="w-6 h-6 text-cyan-600" />
-              Available Projects
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredProjects.map((p) => (
-                <div
-                  key={p._id}
-                  className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 flex flex-col justify-between transition hover:shadow-cyan-100 hover:border-cyan-300"
-                >
-                  <div className="flex-grow">
-                    <h3 className="text-xl font-bold mb-2 text-gray-800">
-                      {p.projectTitle}
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-4 h-24 overflow-y-auto">
-                      {p.description}
-                    </p>
-                    <div className="text-xs text-gray-500 space-y-2 border-t border-slate-200 pt-3 mt-3">
-                      <p>
-                        <strong>Faculty:</strong> {p.facultyName}
-                      </p>
-                      <p>
-                        <strong>Stream:</strong> {p.stream}
-                      </p>
-                      <p>
-                        <strong>Domain:</strong> {p.domain}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedProject(p)}
-                    disabled={appliedProjectIds.has(p._id)}
-                    className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-950 flex items-center gap-2.5">
+                <BookOpen className="w-6 h-6 text-slate-900" />
+                <span>Available Capstone Projects ({filteredProjects.length})</span>
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {filteredProjects.map((p) => {
+                const isApplied = appliedProjectIds.has(p._id);
+
+                return (
+                  <div
+                    key={p._id}
+                    className="bg-white rounded-3xl shadow-lg border-2 border-slate-900 p-6 flex flex-col justify-between transition hover:-translate-y-1 hover:shadow-xl space-y-4"
                   >
-                    {appliedProjectIds.has(p._id) ? (
-                      <>
-                        <CheckCircle className="w-5 h-5" /> Applied
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-5 h-5" /> Apply Now
-                      </>
-                    )}
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-900 border border-slate-300 truncate">
+                          {p.domain}
+                        </span>
+                        {p.vacancies && (
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {p.vacancies} Vacanc{p.vacancies === 1 ? "y" : "ies"}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-lg font-extrabold text-slate-950 leading-snug">
+                        {p.projectTitle}
+                      </h3>
+
+                      <p className="text-xs sm:text-sm text-slate-600 mt-2 line-clamp-3 leading-relaxed font-medium">
+                        {p.description}
+                      </p>
+
+                      <div className="text-xs text-slate-700 space-y-1.5 border-t border-slate-200 pt-3 mt-4">
+                        <p>
+                          <strong>Faculty Guide:</strong> {p.facultyName}
+                        </p>
+                        {p.prerequisites && (
+                          <p className="text-slate-500">
+                            <strong>Prerequisites:</strong> {p.prerequisites}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProject(p)}
+                      disabled={isApplied}
+                      className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-full font-extrabold text-xs sm:text-sm border-2 border-black transition shadow-md ${
+                        isApplied
+                          ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed"
+                          : "bg-slate-950 hover:bg-slate-800 text-white hover:scale-102 active:scale-98"
+                      }`}
+                    >
+                      {isApplied ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Applied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          <span>Apply as Team Leader</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </main>
         </div>
