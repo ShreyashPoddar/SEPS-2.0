@@ -194,19 +194,43 @@ export default function Signup() {
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Capstone Internship Track
-                </label>
-                <select
-                  name="internshipStatus"
-                  value={formData.internshipStatus || "regular"}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
-                >
-                  <option value="regular">🎓 Regular On-Campus Capstone Project</option>
-                  <option value="internship">💼 6-Month Corporate Internship Track</option>
-                </select>
+              <div className="p-3.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
+                    Internship Details (Optional)
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Leave blank if Regular
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">
+                    Company / Organization
+                  </label>
+                  <input
+                    type="text"
+                    name="internshipCompany"
+                    placeholder="e.g. Qualcomm, Amazon, Bosch"
+                    value={formData.internshipCompany || ""}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 mt-0.5 text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-black text-xs font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">
+                    Internship Duration
+                  </label>
+                  <input
+                    type="text"
+                    name="internshipDuration"
+                    placeholder="e.g. 6 Months (Jan - Jun 2026)"
+                    value={formData.internshipDuration || ""}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 mt-0.5 text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-black text-xs font-medium"
+                  />
+                </div>
               </div>
             </>
           )}

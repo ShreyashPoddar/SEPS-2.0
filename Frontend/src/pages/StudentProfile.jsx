@@ -118,32 +118,63 @@ export default function StudentProfile() {
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Capstone Internship Track</label>
-                <select
-                  name="internshipStatus"
-                  value={profile.internshipStatus || "regular"}
-                  onChange={handleChange}
-                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
-                >
-                  <option value="regular">🎓 Regular On-Campus Capstone Track</option>
-                  <option value="internship">💼 6-Month Corporate Internship Track</option>
-                </select>
-              </div>
-
-              {profile.internshipStatus === "internship" && (
-                <div className="md:col-span-2">
-                  <label className="text-xs font-extrabold uppercase tracking-wider text-amber-900">Internship Corporate Host / Company</label>
-                  <input
-                    type="text"
-                    name="internshipCompany"
-                    value={profile.internshipCompany || ""}
-                    placeholder="e.g. Qualcomm, Amazon AWS, Intel, Texas Instruments"
-                    onChange={handleChange}
-                    className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-amber-50/50 border-2 border-amber-300 rounded-xl focus:outline-none focus:border-amber-900 transition font-medium text-sm"
-                  />
+              <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-amber-50/40 border-2 border-slate-300">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                      <span>🏢</span> Internship Experience & Corporate Host
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Enter the company/organization and duration for internships you are doing or have done.
+                    </p>
+                  </div>
+                  <div className="self-start sm:self-auto">
+                    {(profile.internshipCompany || profile.internshipDuration) ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 rounded-full text-xs font-black uppercase tracking-wider">
+                        💼 Corporate Internship Track
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 border border-blue-300 text-blue-900 rounded-full text-xs font-black uppercase tracking-wider">
+                        🎓 Regular On-Campus Track
+                      </span>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                      Company / Organization Name
+                    </label>
+                    <input
+                      type="text"
+                      name="internshipCompany"
+                      value={profile.internshipCompany || ""}
+                      placeholder="e.g. Qualcomm, Amazon AWS, Bosch, ISRO"
+                      onChange={handleChange}
+                      className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                      Internship Duration / Term
+                    </label>
+                    <input
+                      type="text"
+                      name="internshipDuration"
+                      value={profile.internshipDuration || ""}
+                      placeholder="e.g. 6 Months (Jan - Jun 2026), 3 Months"
+                      onChange={handleChange}
+                      className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-3 italic">
+                  💡 Note: Students with an active company & duration are automatically matched in the Corporate Internship cohort. Leave blank if you are doing a standard on-campus capstone.
+                </p>
+              </div>
 
               <div className="md:col-span-2">
                 <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Profile Picture URL</label>

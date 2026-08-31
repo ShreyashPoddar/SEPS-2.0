@@ -301,10 +301,13 @@ export default function ApplyModal({ project, currentUser, onClose, onApplySucce
 
               {/* Host Cohort Track Pill */}
               <div className="flex items-center gap-2 self-start sm:self-auto">
-                {leaderCohort === "internship" ? (
+                {leaderCohort === "internship" || leader.internshipCompany ? (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold shadow-sm">
                     <Briefcase className="w-4 h-4 text-amber-700" />
-                    <span>💼 Corporate Internship Track</span>
+                    <span>
+                      💼 Corporate Internship ({leader.internshipCompany || "Industry Intern"}
+                      {leader.internshipDuration ? ` • ${leader.internshipDuration}` : ""})
+                    </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold shadow-sm">
@@ -515,12 +518,18 @@ export default function ApplyModal({ project, currentUser, onClose, onApplySucce
                             className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${
                               isConflicting
                                 ? "bg-red-100 text-red-900 border-red-400 animate-pulse"
-                                : student.internshipStatus === "internship"
+                                : student.internshipCompany || student.internshipStatus === "internship"
                                 ? "bg-amber-100 text-amber-900 border-amber-300"
                                 : "bg-blue-100 text-blue-900 border-blue-300"
                             }`}
                           >
-                            {student.internshipStatus === "internship" ? "💼 Internship Track" : "🎓 Regular Campus"}
+                            {student.internshipCompany ? (
+                              `💼 ${student.internshipCompany}${student.internshipDuration ? ` (${student.internshipDuration})` : ""}`
+                            ) : student.internshipStatus === "internship" ? (
+                              "💼 Internship Track"
+                            ) : (
+                              "🎓 Regular Campus"
+                            )}
                           </span>
 
                           {student.cgpa && (
@@ -601,12 +610,18 @@ export default function ApplyModal({ project, currentUser, onClose, onApplySucce
                                       className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
                                         candConflict
                                           ? "bg-red-100 text-red-800 border border-red-300"
-                                          : candTrack === "internship"
+                                          : candTrack === "internship" || cand.internshipCompany
                                           ? "bg-amber-100 text-amber-900"
                                           : "bg-blue-100 text-blue-900"
                                       }`}
                                     >
-                                      {candTrack === "internship" ? "💼 Internship" : "🎓 Regular"}
+                                      {cand.internshipCompany ? (
+                                        `💼 ${cand.internshipCompany}${cand.internshipDuration ? ` • ${cand.internshipDuration}` : ""}`
+                                      ) : candTrack === "internship" ? (
+                                        "💼 Internship"
+                                      ) : (
+                                        "🎓 Regular"
+                                      )}
                                     </span>
                                   </div>
                                 </div>

@@ -46,6 +46,18 @@ const userSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    internshipDuration: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    internships: [
+      {
+        company: { type: String, trim: true },
+        role: { type: String, trim: true },
+        duration: { type: String, trim: true },
+      },
+    ],
     skills: {
       type: [String],
       default: [],

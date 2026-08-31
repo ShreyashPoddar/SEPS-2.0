@@ -97,10 +97,10 @@ const mockStudents = [
   { _id: "s2", fullName: "Riyan Kothari", regNo: "RA2111003010002", email: "riyan@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", cgpa: 9.2, skills: ["Python", "ROS2", "Robotics"] },
   { _id: "s3", fullName: "Suhas Manjunath", regNo: "RA2111003010003", email: "suhas@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", cgpa: 9.0, skills: ["IoT", "ESP32", "Edge AI"] },
   { _id: "s4", fullName: "Priya Sharma", regNo: "RA2111003010004", email: "priya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "regular", cgpa: 9.3, skills: ["Full Stack", "React", "NodeJS"] },
-  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111003010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "internship", internshipCompany: "Qualcomm India", cgpa: 9.5, skills: ["PyTorch", "Deep Learning", "CUDA"] },
-  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111003010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "internship", internshipCompany: "Amazon AWS", cgpa: 9.1, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
+  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111003010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "internship", internshipCompany: "Qualcomm India", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.5, skills: ["PyTorch", "Deep Learning", "CUDA"] },
+  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111003010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "internship", internshipCompany: "Amazon AWS", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.1, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
   { _id: "s7", fullName: "Karthik Raja", regNo: "RA2111003010007", email: "karthik@srmist.edu.in", role: "student", department: "Dept of Mechanical", internshipStatus: "regular", cgpa: 8.7, skills: ["SolidWorks", "CAD", "Robotics"] },
-  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111003010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", cgpa: 9.2, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
+  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111003010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.2, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
 ];
 
 function getStoredUser() {
@@ -286,7 +286,13 @@ export const updateProfile = (data) =>
   withFallback(
     () => API.put("/auth/update-profile", data),
     () => {
-      const u = { ...getStoredUser(), ...data };
+      const current = getStoredUser() || {};
+      const hasInternship = Boolean(
+        (data.internshipCompany && data.internshipCompany.trim().length > 0) ||
+        (data.internships && Array.isArray(data.internships) && data.internships.length > 0)
+      );
+      const computedStatus = data.internshipStatus || (hasInternship ? "internship" : "regular");
+      const u = { ...current, ...data, internshipStatus: computedStatus };
       setStoredUser(u);
       return { message: "Profile updated successfully!", user: u };
     }

@@ -196,34 +196,49 @@ export const logout = (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-  const { 
-    profilePic, 
-    department, 
-    internshipStatus,
-    internshipCompany,
-    skills, 
-    resumeUrl, 
-    experience, 
-    description, 
-    researchPast, 
-    cgpa
-  } = req.body;
+    const { 
+      profilePic, 
+      department, 
+      internshipStatus,
+      internshipCompany,
+      internshipDuration,
+      internships,
+      skills, 
+      resumeUrl, 
+      experience, 
+      description, 
+      researchPast, 
+      cgpa
+    } = req.body;
     
     const userId = req.user._id;
 
     const updatedFields = {};
-  if (profilePic) updatedFields.profilePic = profilePic;
-  if (department !== undefined) updatedFields.department = department;
-  if (internshipStatus !== undefined) updatedFields.internshipStatus = internshipStatus;
-  if (internshipCompany !== undefined) updatedFields.internshipCompany = internshipCompany;
-  if (skills) updatedFields.skills = skills;
-  if (resumeUrl) updatedFields.resumeUrl = resumeUrl;
-  if (cgpa !== undefined) updatedFields.cgpa = cgpa;
+    if (profilePic !== undefined) updatedFields.profilePic = profilePic;
+    if (department !== undefined) updatedFields.department = department;
+    if (internshipCompany !== undefined) updatedFields.internshipCompany = internshipCompany;
+    if (internshipDuration !== undefined) updatedFields.internshipDuration = internshipDuration;
+    if (internships !== undefined) updatedFields.internships = internships;
+
+    // Dynamically calculate internshipStatus based on company / duration / internships entered
+    if (internshipStatus !== undefined) {
+      updatedFields.internshipStatus = internshipStatus;
+    } else if (internshipCompany !== undefined || internships !== undefined) {
+      const hasInternship = Boolean(
+        (internshipCompany && internshipCompany.trim().length > 0) ||
+        (Array.isArray(internships) && internships.length > 0 && internships.some((i) => i.company && i.company.trim()))
+      );
+      updatedFields.internshipStatus = hasInternship ? "internship" : "regular";
+    }
+
+    if (skills) updatedFields.skills = skills;
+    if (resumeUrl !== undefined) updatedFields.resumeUrl = resumeUrl;
+    if (cgpa !== undefined) updatedFields.cgpa = cgpa;
     
     if (req.user.role === 'teacher') {
-        if (experience) updatedFields.experience = experience;
-        if (description) updatedFields.description = description;
-        if (researchPast) updatedFields.researchPast = researchPast;
+        if (experience !== undefined) updatedFields.experience = experience;
+        if (description !== undefined) updatedFields.description = description;
+        if (researchPast !== undefined) updatedFields.researchPast = researchPast;
     }
 
     const updatedUser = await User.findByIdAndUpdate(
