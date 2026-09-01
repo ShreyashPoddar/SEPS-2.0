@@ -70,6 +70,8 @@ export const searchUsers = async (req, res) => {
         internshipCompany: 1,
         internshipDuration: 1,
         internships: 1,
+        linkedinUrl: 1,
+        githubUrl: 1,
         cgpa: 1,
         skills: 1,
       }

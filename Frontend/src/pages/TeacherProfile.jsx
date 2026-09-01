@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getCurrentUser, updateProfile, logoutUser } from "../api";
 import { useNavigate } from "react-router-dom";
-import { Loader, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader, Save, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 import Navbar from "../components/Navbar";
 
 export default function TeacherProfile() {
@@ -104,8 +104,62 @@ export default function TeacherProfile() {
                 <label className="text-sm font-medium text-gray-600">Skills (comma-separated)</label>
                 <input type="text" name="skills" value={profile.skills || ""} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <span className="text-[#0A66C2]">💼</span> LinkedIn Profile URL
+                    </label>
+                    {profile.linkedinUrl && (
+                      <a
+                        href={profile.linkedinUrl.startsWith("http") ? profile.linkedinUrl : `https://${profile.linkedinUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-[#0A66C2] hover:underline font-bold flex items-center gap-1"
+                      >
+                        Preview <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    name="linkedinUrl"
+                    value={profile.linkedinUrl || ""}
+                    placeholder="https://linkedin.com/in/username"
+                    onChange={handleChange}
+                    className="w-full mt-1.5 px-4 py-2 text-slate-800 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition text-sm font-medium"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <span className="text-slate-900">🐙</span> GitHub Profile URL
+                    </label>
+                    {profile.githubUrl && (
+                      <a
+                        href={profile.githubUrl.startsWith("http") ? profile.githubUrl : `https://${profile.githubUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-slate-900 hover:underline font-bold flex items-center gap-1"
+                      >
+                        Preview <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    name="githubUrl"
+                    value={profile.githubUrl || ""}
+                    placeholder="https://github.com/username"
+                    onChange={handleChange}
+                    className="w-full mt-1.5 px-4 py-2 text-slate-800 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition text-sm font-medium"
+                  />
+                </div>
+              </div>
+
               <div className="md:col-span-2">
-                <label className="text-sm font-medium text-gray-600">Resume URL</label>
+                <label className="text-sm font-medium text-gray-600">Resume / CV URL</label>
                 <input type="text" name="resumeUrl" value={profile.resumeUrl || ""} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
               </div>
 

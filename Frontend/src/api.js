@@ -17,90 +17,17 @@ const STORAGE_KEY_APPLICATIONS = "seps_applications";
 const STORAGE_KEY_TEAMS = "seps_teams";
 const STORAGE_KEY_TICKETS = "seps_tickets";
 
-const initialProjects = [
-  {
-    _id: "p1",
-    projectTitle: "Autonomous Drone Swarm Navigation via Edge AI & ROS2",
-    facultyName: "Dr. M. Sangeetha",
-    facultyEmail: "sangeetm@srmist.edu.in",
-    domain: "Automation and Robotics",
-    description: "Developing decentralized swarm intelligence algorithms for autonomous UAVs using ROS2 and embedded Jetson Nano platforms.",
-    vacancies: 2,
-    teamLimit: 4,
-    prerequisites: "ROS2, Python, C++, Linux",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "p2",
-    projectTitle: "FPGA-Accelerated Cryptographic Hardware Accelerator",
-    facultyName: "Dr. K. Vadivukkarasi",
-    facultyEmail: "vadivukk@srmist.edu.in",
-    domain: "VLSI Design",
-    description: "Design and implementation of high-throughput AES-256 and ECC cryptographic accelerators on Xilinx Artix-7 FPGAs.",
-    vacancies: 1,
-    teamLimit: 3,
-    prerequisites: "Verilog, Digital Design, Vivado",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "p3",
-    projectTitle: "Low-Power LoRaWAN Mesh Network for Smart Campus IoT",
-    facultyName: "Dr. G. Elavelvis",
-    facultyEmail: "elavelvg@srmist.edu.in",
-    domain: "Embedded Systems and IoT",
-    description: "Creating an energy-harvesting multi-hop LoRa sensor network for environmental and air quality monitoring across university blocks.",
-    vacancies: 3,
-    teamLimit: 4,
-    prerequisites: "Embedded C, ESP32, LoRaWAN",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "p4",
-    projectTitle: "Real-Time Bio-Signal Monitoring with Edge Neural Accelerators",
-    facultyName: "Dr. S. Malarvizhi",
-    facultyEmail: "malarvig@srmist.edu.in",
-    domain: "Biomedical Electronics",
-    description: "Wearable ECG and EMG anomaly detection using quantized 1D Convolutional Neural Networks on low-power microcontrollers.",
-    vacancies: 2,
-    teamLimit: 3,
-    prerequisites: "Signal Processing, PyTorch, PCB Design",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "p5",
-    projectTitle: "5G Beamforming Antenna Array with Reconfigurable Surfaces",
-    facultyName: "Dr. B. Ramachandran",
-    facultyEmail: "ramachab@srmist.edu.in",
-    domain: "Antenna design and RF systems",
-    description: "Design of millimeter-wave phased array antennas and intelligent reflecting surfaces (RIS) for enhanced wireless coverage.",
-    vacancies: 2,
-    teamLimit: 4,
-    prerequisites: "HFSS, CST Studio, Electromagnetics",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "p6",
-    projectTitle: "Deep Learning based Real-Time Traffic Sign & Pedestrian Detection",
-    facultyName: "Dr. R. Kumar",
-    facultyEmail: "kumarr@srmist.edu.in",
-    domain: "AI/ML/DL based applications",
-    description: "Optimized YOLOv10 object detection deployment on embedded automotive edge hardware for advanced driver assistance systems (ADAS).",
-    vacancies: 1,
-    teamLimit: 4,
-    prerequisites: "PyTorch, OpenCV, TensorRT",
-    createdAt: new Date().toISOString(),
-  }
-];
+const initialProjects = [];
 
 const mockStudents = [
-  { _id: "s1", fullName: "Aadyoth Sreeram", regNo: "RA2111003010001", email: "aadyoth@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", cgpa: 9.4, skills: ["Embedded C", "RTOS", "Verilog"] },
-  { _id: "s2", fullName: "Riyan Kothari", regNo: "RA2111003010002", email: "riyan@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", cgpa: 9.2, skills: ["Python", "ROS2", "Robotics"] },
-  { _id: "s3", fullName: "Suhas Manjunath", regNo: "RA2111003010003", email: "suhas@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", cgpa: 9.0, skills: ["IoT", "ESP32", "Edge AI"] },
-  { _id: "s4", fullName: "Priya Sharma", regNo: "RA2111003010004", email: "priya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "regular", cgpa: 9.3, skills: ["Full Stack", "React", "NodeJS"] },
-  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111003010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "internship", internshipCompany: "Qualcomm India", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.5, skills: ["PyTorch", "Deep Learning", "CUDA"] },
-  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111003010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "internship", internshipCompany: "Amazon AWS", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.1, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
-  { _id: "s7", fullName: "Karthik Raja", regNo: "RA2111003010007", email: "karthik@srmist.edu.in", role: "student", department: "Dept of Mechanical", internshipStatus: "regular", cgpa: 8.7, skills: ["SolidWorks", "CAD", "Robotics"] },
-  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111003010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", internshipDuration: "6 Months (Jan - Jun 2026)", cgpa: 9.2, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
+  { _id: "s1", fullName: "Aadyoth Sreeram", regNo: "RA2111003010001", email: "aadyoth@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/aadyoth", githubUrl: "https://github.com/aadyoth", cgpa: 9.4, skills: ["Embedded C", "RTOS", "Verilog"] },
+  { _id: "s2", fullName: "Riyan Kothari", regNo: "RA2111003010002", email: "riyan@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/riyan-kothari", githubUrl: "https://github.com/RiyanKothari", cgpa: 9.2, skills: ["Python", "ROS2", "Robotics"] },
+  { _id: "s3", fullName: "Suhas Manjunath", regNo: "RA2111003010003", email: "suhas@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/suhas", githubUrl: "https://github.com/suhas", cgpa: 9.0, skills: ["IoT", "ESP32", "Edge AI"] },
+  { _id: "s4", fullName: "Priya Sharma", regNo: "RA2111003010004", email: "priya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/priya", githubUrl: "https://github.com/priya", cgpa: 9.3, skills: ["Full Stack", "React", "NodeJS"] },
+  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111003010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "internship", internshipCompany: "Qualcomm India", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/aditya", githubUrl: "https://github.com/aditya", cgpa: 9.5, skills: ["PyTorch", "Deep Learning", "CUDA"] },
+  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111003010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "internship", internshipCompany: "Amazon AWS", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/ananya", githubUrl: "https://github.com/ananya", cgpa: 9.1, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
+  { _id: "s7", fullName: "Karthik Raja", regNo: "RA2111003010007", email: "karthik@srmist.edu.in", role: "student", department: "Dept of Mechanical", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/karthik", githubUrl: "https://github.com/karthik", cgpa: 8.7, skills: ["SolidWorks", "CAD", "Robotics"] },
+  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111003010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/sneha", githubUrl: "https://github.com/sneha", cgpa: 9.2, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
 ];
 
 function getStoredUser() {
@@ -129,11 +56,10 @@ function getStoredProjects() {
     try {
       return JSON.parse(raw);
     } catch {
-      return initialProjects;
+      return [];
     }
   }
-  localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(initialProjects));
-  return initialProjects;
+  return [];
 }
 
 // Wrapper for resilient execution with mock fallback

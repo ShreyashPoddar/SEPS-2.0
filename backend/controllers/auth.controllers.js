@@ -5,21 +5,25 @@ import { sendWelcomeEmail, sendVerificationEmail, sendResetEmail } from "../lib/
 import crypto from "crypto";
 
 export const signup = async (req, res) => {
-  const {
-    fullName,
-    email,
-    password,
-    role,
-    regNo,
-    department,
-    internshipStatus,
-    internshipCompany,
-    cgpa,
-    skills,
-    experience,
-    description,
-    researchPast,
-  } = req.body;
+    const {
+      fullName,
+      email,
+      password,
+      role,
+      regNo,
+      department,
+      internshipStatus,
+      internshipCompany,
+      internshipDuration,
+      internships,
+      linkedinUrl,
+      githubUrl,
+      cgpa,
+      skills,
+      experience,
+      description,
+      researchPast,
+    } = req.body;
 
   try {
     if (!fullName || !email || !password || !role) {
@@ -63,6 +67,10 @@ export const signup = async (req, res) => {
       department: department || "Dept of ECE",
       internshipStatus: internshipStatus || "regular",
       internshipCompany: internshipCompany || "",
+      internshipDuration: internshipDuration || "",
+      internships: internships || [],
+      linkedinUrl: linkedinUrl || "",
+      githubUrl: githubUrl || "",
       cgpa: cgpa || 0,
       skills: skills || [],
       password: hashedPassword,
@@ -205,6 +213,8 @@ export const updateProfile = async (req, res) => {
       internships,
       skills, 
       resumeUrl, 
+      linkedinUrl,
+      githubUrl,
       experience, 
       description, 
       researchPast, 
@@ -233,6 +243,8 @@ export const updateProfile = async (req, res) => {
 
     if (skills) updatedFields.skills = skills;
     if (resumeUrl !== undefined) updatedFields.resumeUrl = resumeUrl;
+    if (linkedinUrl !== undefined) updatedFields.linkedinUrl = linkedinUrl;
+    if (githubUrl !== undefined) updatedFields.githubUrl = githubUrl;
     if (cgpa !== undefined) updatedFields.cgpa = cgpa;
     
     if (req.user.role === 'teacher') {

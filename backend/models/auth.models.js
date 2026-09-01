@@ -73,6 +73,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    linkedinUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    githubUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     profilePic: {
       type: String,
       default: "",
