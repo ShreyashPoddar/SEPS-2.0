@@ -1,36 +1,30 @@
-import StudentProjectApply from "../models/studentprojectapply.models.js";
-import Project from "../models/projectupload.models.js";
-import User from "../models/auth.models.js";
-import Ticket from "../models/ticket.model.js";
+import prisma from "../lib/db.js";
 
-// The applyToProject function now validates cohort tracks and cross-branch assignments dynamically from DB
+const memberOrder = { orderBy: { createdAt: "asc" } };
+
 export const applyToProject = async (req, res) => {
   try {
     const { projectId, applicationType, members } = req.body;
     const leader = req.user;
 
-    // Count how many times student has applied
-    const existingApps = await StudentProjectApply.find({
-      "members.studentId": leader._id,
+    const existingMemberships = await prisma.applicationMember.findMany({
+      where: { studentId: leader._id },
+      include: { application: true },
     });
 
-    if (existingApps.length >= 2) {
+    if (existingMemberships.length >= 2) {
       return res.status(400).json({
         message: "You can only apply for up to 2 projects (Priority 1 & 2).",
       });
     }
 
-    // Auto-assign priority
-    const priority = existingApps.length === 0 ? 1 : 2;
+    const priority = existingMemberships.length === 0 ? 1 : 2;
 
-    // Prevent duplicate priority
-    if (existingApps.some((a) => a.priority === priority)) {
-      return res
-        .status(400)
-        .json({ message: `You already applied for Priority ${priority}.` });
+    if (existingMemberships.some((m) => m.application.priority === priority)) {
+      return res.status(400).json({ message: `You already applied for Priority ${priority}.` });
     }
 
-    const project = await Project.findById(projectId);
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return res.status(404).json({ message: "Project not found." });
     }
@@ -39,8 +33,7 @@ export const applyToProject = async (req, res) => {
     const leaderDept = leader.department || "Dept of ECE";
     let hasCrossBranch = false;
 
-    // Build members list
-    const memberList = [
+    const memberData = [
       {
         studentId: leader._id,
         name: leader.fullName,
@@ -54,18 +47,18 @@ export const applyToProject = async (req, res) => {
     if (applicationType === "group") {
       if (!members || members.length !== 2) {
         return res.status(400).json({
-          message:
-            "A group application must include exactly two other members.",
+          message: "A group application must include exactly two other members.",
         });
       }
 
       for (const member of members) {
-        const memberUser = await User.findOne({
-          $or: [
-            { regNo: member.regNo },
-            { _id: member.studentId },
-          ],
-        });
+        const orClauses = [];
+        if (member.regNo) orClauses.push({ regNo: member.regNo });
+        if (member.studentId) orClauses.push({ id: member.studentId });
+
+        const memberUser = orClauses.length
+          ? await prisma.user.findFirst({ where: { OR: orClauses } })
+          : null;
 
         if (!memberUser) {
           return res.status(404).json({
@@ -73,9 +66,8 @@ export const applyToProject = async (req, res) => {
           });
         }
 
-        const teammateAlreadyApplied = await StudentProjectApply.findOne({
-          projectId,
-          "members.studentId": memberUser._id,
+        const teammateAlreadyApplied = await prisma.applicationMember.findFirst({
+          where: { studentId: memberUser.id, application: { projectId } },
         });
         if (teammateAlreadyApplied) {
           return res.status(400).json({
@@ -83,7 +75,7 @@ export const applyToProject = async (req, res) => {
           });
         }
 
-        // ⚡ DYNAMIC INTERNSHIP COHORT CONSTRAINT VALIDATION
+        // Internship-cohort constraint: mixed regular/internship teams aren't allowed
         const memberCohort = memberUser.internshipStatus || "regular";
         if (memberCohort !== leaderCohort) {
           return res.status(400).json({
@@ -91,14 +83,13 @@ export const applyToProject = async (req, res) => {
           });
         }
 
-        // ⚡ DYNAMIC CROSS-BRANCH DETECTION
         const memberDept = memberUser.department || "Dept of ECE";
         if (memberDept !== leaderDept) {
           hasCrossBranch = true;
         }
 
-        memberList.push({
-          studentId: memberUser._id,
+        memberData.push({
+          studentId: memberUser.id,
           name: memberUser.fullName,
           regNo: memberUser.regNo,
           department: memberDept,
@@ -108,20 +99,19 @@ export const applyToProject = async (req, res) => {
       }
     }
 
-    const application = new StudentProjectApply({
-      projectId,
-      applicationType,
-      cohortTrack: leaderCohort,
-      hasCrossBranch,
-      members: memberList,
-      priority,
-      status:
-        applicationType === "group"
-          ? "pending_member_approval"
-          : "pending_faculty_approval",
+    const application = await prisma.studentProjectApply.create({
+      data: {
+        projectId,
+        applicationType,
+        cohortTrack: leaderCohort,
+        hasCrossBranch,
+        priority,
+        status: applicationType === "group" ? "pending_member_approval" : "pending_faculty_approval",
+        members: { create: memberData },
+      },
+      include: { members: memberOrder },
     });
-
-    await application.save();
+    application._id = application.id;
 
     res.status(201).json({
       message: `Application for Priority ${priority} submitted successfully!`,
@@ -133,54 +123,38 @@ export const applyToProject = async (req, res) => {
   }
 };
 
-// NEW: Get all pending invitations for the logged-in student
 export const getPendingInvitations = async (req, res) => {
   try {
-    // Get the logged-in student's ID from the request object.
     const studentId = req.user._id;
 
-    // Find project applications where a single element in the 'members' array
-    // matches BOTH the student's ID and a 'pending' status.
-    // $elemMatch is crucial here to ensure both conditions are met by the same member.
-    const invitations = await StudentProjectApply.find({
-      members: {
-        $elemMatch: {
-          studentId: studentId,
-          status: "pending",
-        },
+    const invitations = await prisma.studentProjectApply.findMany({
+      where: { members: { some: { studentId, status: "pending" } } },
+      include: {
+        members: memberOrder,
+        project: { select: { projectTitle: true, facultyName: true } },
       },
-    }).populate("projectId", "projectTitle facultyName"); // Populate project details.
+    });
 
-    // The rest of your logic for formatting the response is correct and remains the same.
-    // It filters and maps the found applications to the format expected by the frontend.
     const formattedInvitations = invitations.map((app) => {
-      // Find the specific member document for the current user.
-      const member = app.members.find((m) => m.studentId.equals(studentId));
-      // Assume the first member in the array is the leader.
+      const member = app.members.find((m) => m.studentId === studentId);
       const leader = app.members[0];
 
       return {
-        applicationId: app._id,
-        memberId: member._id,
-        projectTitle: app.projectId.projectTitle,
-        facultyName: app.projectId.facultyName,
+        applicationId: app.id,
+        memberId: member.id,
+        projectTitle: app.project.projectTitle,
+        facultyName: app.project.facultyName,
         leaderName: leader.name,
       };
     });
 
-    // Send the correctly filtered and formatted invitations back to the client.
     res.status(200).json(formattedInvitations);
   } catch (error) {
-    // Handle any server-side errors that occur during the process.
     console.error("Error fetching pending invitations:", error);
-    res.status(500).json({
-      message: "Server error fetching invitations.",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Server error fetching invitations.", error: error.message });
   }
 };
 
-// NEW: Respond to an invitation (accept or reject)
 export const respondToInvitation = async (req, res) => {
   try {
     const { applicationId, memberId, response } = req.body;
@@ -190,119 +164,50 @@ export const respondToInvitation = async (req, res) => {
       return res.status(400).json({ message: "Invalid response." });
     }
 
-    const application = await StudentProjectApply.findById(applicationId);
+    const application = await prisma.studentProjectApply.findUnique({
+      where: { id: applicationId },
+      include: { members: memberOrder },
+    });
     if (!application) {
       return res.status(404).json({ message: "Application not found." });
     }
 
-    const member = application.members.id(memberId);
-    if (!member || !member.studentId.equals(studentId)) {
+    const member = application.members.find((m) => m.id === memberId);
+    if (!member || member.studentId !== studentId) {
       return res.status(403).json({
         message: "You are not authorized to respond to this invitation.",
       });
     }
 
     if (response === "approved") {
-      member.status = "approved";
+      await prisma.applicationMember.update({
+        where: { id: memberId },
+        data: { status: "approved" },
+      });
 
-      const allMembersApproved = application.members.every(
-        (m) => m.status === "approved"
-      );
-      if (allMembersApproved) {
-        application.status = "pending_faculty_approval";
-        // TODO: Notify the faculty member
-        console.log(
-          `NOTIFY FACULTY: Application ${application._id} is ready for review.`
-        );
+      const refreshed = await prisma.applicationMember.findMany({
+        where: { applicationId },
+      });
+      const allApproved = refreshed.every((m) => m.status === "approved");
+      if (allApproved) {
+        await prisma.studentProjectApply.update({
+          where: { id: applicationId },
+          data: { status: "pending_faculty_approval" },
+        });
+        console.log(`NOTIFY FACULTY: Application ${applicationId} is ready for review.`);
       }
     } else {
-      // 'rejected'
-      // If one member rejects, the entire application is removed.
-      await StudentProjectApply.findByIdAndDelete(applicationId);
-      // TODO: Notify the group leader that their application was rejected by a teammate.
+      await prisma.studentProjectApply.delete({ where: { id: applicationId } });
       return res.status(200).json({
-        message:
-          "You have rejected the invitation. The application has been withdrawn.",
+        message: "You have rejected the invitation. The application has been withdrawn.",
       });
     }
 
-    await application.save();
-    res
-      .status(200)
-      .json({ message: "You have successfully accepted the invitation!" });
+    res.status(200).json({ message: "You have successfully accepted the invitation!" });
   } catch (error) {
-    res.status(500).json({
-      message: "Server error responding to invitation.",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Server error responding to invitation.", error: error.message });
   }
 };
-
-// export const getApplicationsForProject = async (req, res) => {
-//   try {
-//     if (req.user.role !== "teacher") {
-//       return res.status(403).json({
-//         message: "Access denied. Only teachers can view applications.",
-//       });
-//     }
-
-//     const { projectId } = req.params;
-
-//     const project = await Project.findById(projectId);
-//     if (!project) {
-//       return res.status(404).json({ message: "Project not found" });
-//     }
-
-//     if (project.facultyName !== req.user.fullName) {
-//       return res.status(403).json({
-//         message:
-//           "Access denied. You can only view applications for your own projects.",
-//       });
-//     }
-
-//     // 🔹 Fetch all applications for this project
-//     let applications = await StudentProjectApply.find({ projectId }).populate(
-//       "members.studentId",
-//       "fullName email regNo"
-//     );
-
-//     if (!applications.length) {
-//       return res.status(200).json({ project, applications: [] });
-//     }
-
-//     // 🔹 Step 1: project-level priority filter
-//     const hasPriority1 = applications.some((app) => app.priority === 1);
-//     applications = applications.filter((app) =>
-//       hasPriority1 ? app.priority === 1 : app.priority === 2
-//     );
-
-//     // 🔹 Step 2: student-level filter (remove all priority:2 if same student has priority:1 anywhere)
-//     const priority1Students = await StudentProjectApply.distinct(
-//       "members.studentId",
-//       { priority: 1 }
-//     );
-
-//     applications = applications.filter((app) => {
-//       if (app.priority === 1) return true; // always keep priority 1
-//       // drop priority 2 if student has priority 1 elsewhere
-//       return !app.members.some((m) =>
-//         priority1Students.includes(m.studentId.toString())
-//       );
-//     });
-
-//     res.status(200).json({
-//       project: {
-//         _id: project._id,
-//         title: project.projectTitle,
-//         facultyName: project.facultyName,
-//       },
-//       applications,
-//     });
-//   } catch (error) {
-//     console.error("Get Applications Error:", error);
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// };
 
 export const getApplicationsForProject = async (req, res) => {
   try {
@@ -314,29 +219,31 @@ export const getApplicationsForProject = async (req, res) => {
 
     const { projectId } = req.params;
 
-    const project = await Project.findById(projectId);
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
     if (project.facultyName !== req.user.fullName) {
       return res.status(403).json({
-        message:
-          "Access denied. You can only view applications for your own projects.",
+        message: "Access denied. You can only view applications for your own projects.",
       });
     }
 
-    // 🔹 Fetch all applications for this project
-    let applications = await StudentProjectApply.find({ projectId }).populate(
-      "members.studentId",
-      "fullName email regNo"
-    );
+    let applications = await prisma.studentProjectApply.findMany({
+      where: { projectId },
+      include: {
+        members: {
+          ...memberOrder,
+          include: { student: { select: { fullName: true, email: true, regNo: true } } },
+        },
+      },
+    });
 
     if (!applications.length) {
-      return res.status(200).json({ project, applications: [] });
+      return res.status(200).json({ project: withId(project), applications: [] });
     }
 
-    // 🔹 Step 1: Determine highest priority present (only 1 or 2 allowed)
     let highestPriority = null;
     for (let p = 1; p <= 2; p++) {
       if (applications.some((app) => app.priority === p)) {
@@ -346,32 +253,35 @@ export const getApplicationsForProject = async (req, res) => {
     }
 
     if (!highestPriority) {
-      // no priority 1 or 2 found → ignore priority 3+
-      return res.status(200).json({ project, applications: [] });
+      return res.status(200).json({ project: withId(project), applications: [] });
     }
 
-    applications = applications.filter(
-      (app) => app.priority === highestPriority
-    );
+    applications = applications.filter((app) => app.priority === highestPriority);
 
-    // 🔹 Step 2: Global filter → drop ALL priority 2 apps of students who have priority 1 anywhere
-    const priority1Students = await StudentProjectApply.distinct(
-      "members.studentId",
-      { priority: 1 }
-    );
-    const p1Set = new Set(priority1Students.map((id) => id.toString()));
+    const priority1Members = await prisma.applicationMember.findMany({
+      where: { application: { priority: 1 } },
+      select: { studentId: true },
+    });
+    const p1Set = new Set(priority1Members.map((m) => m.studentId));
 
     applications = applications.filter((app) => {
       if (app.priority === 2) {
-        // keep only if none of its members have a priority 1 elsewhere
-        return !app.members.some((m) => p1Set.has(m.studentId.toString()));
+        return !app.members.some((m) => p1Set.has(m.studentId));
       }
-      return true; // always keep priority 1 apps
+      return true;
+    });
+
+    applications.forEach((app) => {
+      app._id = app.id;
+      app.members.forEach((m) => {
+        m._id = m.id;
+        m.studentId = { _id: m.studentId, ...m.student };
+      });
     });
 
     res.status(200).json({
       project: {
-        _id: project._id,
+        _id: project.id,
         title: project.projectTitle,
         facultyName: project.facultyName,
       },
@@ -383,32 +293,37 @@ export const getApplicationsForProject = async (req, res) => {
   }
 };
 
-// 🔹 Get all applications for the logged-in student
+// Get all applications for the logged-in student
 export const getMyApplications = async (req, res) => {
   try {
     const studentId = req.user._id;
-    const applications = await StudentProjectApply.find({
-      "members.studentId": studentId,
-    })
-      .populate("projectId", "projectTitle facultyName domain description vacancies prerequisites")
-      .populate("members.studentId", "fullName email regNo department internshipStatus internshipCompany")
-      .sort({ createdAt: -1 });
+    const applications = await prisma.studentProjectApply.findMany({
+      where: { members: { some: { studentId } } },
+      include: {
+        project: { select: { id: true, projectTitle: true, facultyName: true, domain: true, description: true } },
+        members: {
+          ...memberOrder,
+          include: { student: { select: { department: true, internshipStatus: true } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     const formatted = applications.map((app) => ({
-      _id: app._id,
-      projectId: app.projectId?._id,
-      projectTitle: app.projectId?.projectTitle || "Capstone Project",
-      facultyName: app.projectId?.facultyName || "Faculty Advisor",
+      _id: app.id,
+      projectId: app.project?.id,
+      projectTitle: app.project?.projectTitle || "Capstone Project",
+      facultyName: app.project?.facultyName || "Faculty Advisor",
       priority: app.priority,
       status: app.status,
       cohortTrack: app.cohortTrack || "regular",
       hasCrossBranch: app.hasCrossBranch || false,
       members: app.members.map((m) => ({
-        studentId: m.studentId?._id || m.studentId,
+        studentId: m.studentId,
         name: m.name,
         regNo: m.regNo,
-        department: m.department || m.studentId?.department || "Dept of ECE",
-        internshipStatus: m.internshipStatus || m.studentId?.internshipStatus || "regular",
+        department: m.department || m.student?.department || "Dept of ECE",
+        internshipStatus: m.internshipStatus || m.student?.internshipStatus || "regular",
         status: m.status,
       })),
       submittedAt: app.createdAt || app.appliedAt,
@@ -421,7 +336,7 @@ export const getMyApplications = async (req, res) => {
   }
 };
 
-// 🔹 Raise a team member modification ticket
+// Raise a team member modification ticket
 export const raiseTicket = async (req, res) => {
   try {
     const { applicationId, projectTitle, facultyName, targetMember, changeType, requestedChanges, reason } = req.body;
@@ -433,28 +348,29 @@ export const raiseTicket = async (req, res) => {
 
     const ticketId = "TCK-" + Math.floor(1000 + Math.random() * 9000);
 
-    const newTicket = new Ticket({
-      ticketId,
-      applicationId,
-      studentId,
-      projectTitle: projectTitle || "Capstone Project",
-      facultyName: facultyName || "Faculty Guide",
-      targetMember,
-      changeType,
-      requestedChanges,
-      reason,
-      status: "pending",
-      progressStep: 1,
-      timeline: [
-        {
-          step: "Submitted",
-          date: new Date(),
-          message: "Ticket created and dispatched to Department Coordinator.",
-        },
-      ],
+    const newTicket = await prisma.ticket.create({
+      data: {
+        ticketId,
+        applicationId,
+        studentId,
+        projectTitle: projectTitle || "Capstone Project",
+        facultyName: facultyName || "Faculty Guide",
+        targetMember,
+        changeType,
+        requestedChanges: requestedChanges || undefined,
+        reason,
+        status: "pending",
+        progressStep: 1,
+        timeline: [
+          {
+            step: "Submitted",
+            date: new Date(),
+            message: "Ticket created and dispatched to Department Coordinator.",
+          },
+        ],
+      },
     });
-
-    await newTicket.save();
+    newTicket._id = newTicket.id;
 
     res.status(201).json({
       message: `Ticket #${ticketId} submitted successfully! Your departmental coordinator will review the request.`,
@@ -466,11 +382,15 @@ export const raiseTicket = async (req, res) => {
   }
 };
 
-// 🔹 Get all change tickets for the logged-in student
+// Get all change tickets for the logged-in student
 export const getStudentTickets = async (req, res) => {
   try {
     const studentId = req.user._id;
-    const tickets = await Ticket.find({ studentId }).sort({ createdAt: -1 });
+    const tickets = await prisma.ticket.findMany({
+      where: { studentId },
+      orderBy: { createdAt: "desc" },
+    });
+    tickets.forEach((t) => (t._id = t.id));
     res.status(200).json(tickets);
   } catch (error) {
     console.error("Get student tickets error:", error);
@@ -478,25 +398,32 @@ export const getStudentTickets = async (req, res) => {
   }
 };
 
-// 🔹 Cancel a change ticket
+// Cancel a change ticket
 export const cancelTicket = async (req, res) => {
   try {
     const { ticketId } = req.params;
     const studentId = req.user._id;
 
-    const ticket = await Ticket.findOne({
-      $or: [{ _id: ticketId }, { ticketId: ticketId }],
-      studentId,
+    const ticket = await prisma.ticket.findFirst({
+      where: {
+        OR: [{ id: ticketId }, { ticketId: ticketId }],
+        studentId,
+      },
     });
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found or unauthorized." });
     }
 
-    await Ticket.findByIdAndDelete(ticket._id);
+    await prisma.ticket.delete({ where: { id: ticket.id } });
     res.status(200).json({ message: "Ticket cancelled successfully." });
   } catch (error) {
     console.error("Cancel ticket error:", error);
     res.status(500).json({ message: "Server error cancelling ticket", error: error.message });
   }
 };
+
+function withId(obj) {
+  obj._id = obj.id;
+  return obj;
+}

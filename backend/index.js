@@ -14,6 +14,7 @@ import teamApprovedRoutes from "./routes/teamapproved.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import infoRoutes from "./routes/info.routes.js";
 import globalDeadlineRoutes from "./routes/globalDeadline.routes.js";
+import statisticsRoutes from "./routes/statistics.routes.js";
 
 // Load environment variables
 dotenv.config();
@@ -22,11 +23,6 @@ dotenv.config();
 const app = express();
 
 // ✅ CORS config for frontend + credentials support
-const allowedOrigins = [
-  process.env.CLIENT_URL || "http://localhost:5173",
-  "http://localhost:5173",
-  "http://localhost:3050",
-];
 app.use(
   cors({
     origin: true,
@@ -59,7 +55,6 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/team-approved", teamApprovedRoutes);
 app.use("/api/info", infoRoutes);
 app.use("/api/global-deadline", globalDeadlineRoutes);
-import statisticsRoutes from "./routes/statistics.routes.js";
 app.use("/api/statistics", statisticsRoutes);
 
 // Catch-all for unknown routes
@@ -68,13 +63,10 @@ app.all("*", (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3050; // ✅ Default to 3050
+const PORT = process.env.PORT || 3050;
 const startServer = async () => {
   try {
     await connectDB();
-    // app.listen(PORT, () => {
-    //   console.log(`🚀 Server running on http://localhost:${PORT}`);
-    // });
     app.listen(PORT, "0.0.0.0", () => {
       console.log(
         `🚀 Server running on [::]:${PORT} (IPv6 and IPv4 if dual stack)`

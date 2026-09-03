@@ -1,81 +1,66 @@
 // controllers/usersearch.controller.js
-import User from "../models/auth.models.js";
-import StudentProjectApply from "../models/studentprojectapply.models.js";
-import TeamApproved from "../models/teamapproved.model.js";
+import prisma from "../lib/db.js";
 
 export const searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
 
     if (!q) {
-      return res
-        .status(400)
-        .json({ message: "Query parameter 'q' is required" });
+      return res.status(400).json({ message: "Query parameter 'q' is required" });
     }
 
     const unavailableStudentIds = new Set();
 
-    // 🔹 Exclude students already in approved teams (only once allowed)
-    const approvedTeams = await TeamApproved.find({}, "members.studentId");
-    approvedTeams.forEach((team) => {
-      team.members.forEach((m) =>
-        unavailableStudentIds.add(m.studentId.toString())
-      );
+    const approvedTeamMembers = await prisma.teamMember.findMany({
+      select: { studentId: true },
     });
+    approvedTeamMembers.forEach((m) => unavailableStudentIds.add(m.studentId));
 
-    // 🔹 Count how many times each student appears in StudentProjectApply
-    const applicationCounts = await StudentProjectApply.aggregate([
-      {
-        $match: {
+    const activeMembers = await prisma.applicationMember.findMany({
+      where: {
+        application: {
           status: {
-            $in: [
-              "pending_member_approval",
-              "pending_faculty_approval",
-              "approved",
-            ],
+            in: ["pending_member_approval", "pending_faculty_approval", "approved"],
           },
         },
       },
-      { $unwind: "$members" },
-      {
-        $group: {
-          _id: "$members.studentId",
-          count: { $sum: 1 },
-        },
-      },
-      { $match: { count: { $gte: 2 } } }, // ❌ Exclude students in 2+ applications
-    ]);
+      select: { studentId: true },
+    });
+    const counts = {};
+    activeMembers.forEach((m) => {
+      counts[m.studentId] = (counts[m.studentId] || 0) + 1;
+    });
+    Object.keys(counts).forEach((id) => {
+      if (counts[id] >= 2) unavailableStudentIds.add(id);
+    });
 
-    applicationCounts.forEach((s) =>
-      unavailableStudentIds.add(s._id.toString())
-    );
-
-    // 🔹 Now search only available students with full academic profile fields
-    const users = await User.find(
-      {
+    const users = await prisma.user.findMany({
+      where: {
         role: "student",
-        $or: [
-          { fullName: { $regex: q, $options: "i" } },
-          { regNo: { $regex: q, $options: "i" } },
+        id: { notIn: Array.from(unavailableStudentIds) },
+        OR: [
+          { fullName: { contains: q } },
+          { regNo: { contains: q } },
         ],
-        _id: { $nin: Array.from(unavailableStudentIds) },
       },
-      {
-        _id: 1,
-        regNo: 1,
-        fullName: 1,
-        email: 1,
-        department: 1,
-        internshipStatus: 1,
-        internshipCompany: 1,
-        internshipDuration: 1,
-        internships: 1,
-        linkedinUrl: 1,
-        githubUrl: 1,
-        cgpa: 1,
-        skills: 1,
-      }
-    ).limit(10);
+      select: {
+        id: true,
+        regNo: true,
+        fullName: true,
+        email: true,
+        department: true,
+        internshipStatus: true,
+        internshipCompany: true,
+        internshipDuration: true,
+        internships: true,
+        linkedinUrl: true,
+        githubUrl: true,
+        cgpa: true,
+        skills: true,
+      },
+      take: 10,
+    });
+    users.forEach((u) => (u._id = u.id));
 
     res.json(users);
   } catch (err) {
