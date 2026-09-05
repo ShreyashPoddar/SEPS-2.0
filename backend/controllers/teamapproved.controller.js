@@ -3,6 +3,36 @@ import prisma from "../lib/db.js";
 
 const memberOrder = { orderBy: { createdAt: "asc" } };
 
+// `shapeTeam` spreads the related user into members[].studentId, so this must
+// never be `student: true` — that ships password hashes and reset tokens to the
+// client. MyTeams.jsx only reads studentId._id; the rest is display headroom.
+const safeStudent = {
+  select: {
+    id: true,
+    fullName: true,
+    email: true,
+    regNo: true,
+    department: true,
+  },
+};
+
+const teamWithMembers = {
+  project: true,
+  members: { ...memberOrder, include: { student: safeStudent } },
+};
+
+// Faculty may only act on teams and applications belonging to their own
+// projects. Returns an error object to send, or null when the caller is allowed.
+const ownershipError = (req, project) => {
+  if (req.user.role !== "teacher") {
+    return { status: 403, message: "Access denied. Only teachers can manage approved teams." };
+  }
+  if (!project || project.teacherId !== req.user._id) {
+    return { status: 403, message: "Access denied. You can only manage teams for your own projects." };
+  }
+  return null;
+};
+
 const shapeTeam = (team) => {
   team._id = team.id;
   team.projectId = team.project ? { _id: team.project.id, ...team.project } : team.projectId;
@@ -28,6 +58,11 @@ export const approveApplication = async (req, res) => {
       return res.status(404).json({ message: "Application not found" });
     }
 
+    const denied = ownershipError(req, application.project);
+    if (denied) {
+      return res.status(denied.status).json({ message: denied.message });
+    }
+
     const approvedTeam = await prisma.teamApproved.create({
       data: {
         projectId: application.project.id,
@@ -41,7 +76,7 @@ export const approveApplication = async (req, res) => {
           })),
         },
       },
-      include: { project: true, members: memberOrder },
+      include: teamWithMembers,
     });
 
     for (const member of application.members) {
@@ -55,11 +90,30 @@ export const approveApplication = async (req, res) => {
       });
     }
 
+    // Tickets raised against this application move to the approved team, so the
+    // roster-change history survives approval. Without this the applications are
+    // deleted below and every ticket went with them — leaving students unable to
+    // request a member change at the one point they most need to.
+    await prisma.ticket.updateMany({
+      where: { applicationId },
+      data: { teamId: approvedTeam.id, applicationId: null },
+    });
+
     const memberIds = application.members.map((m) => m.studentId);
     const otherApplications = await prisma.studentProjectApply.findMany({
       where: { members: { some: { studentId: { in: memberIds } } } },
       select: { id: true },
     });
+    const discardedIds = otherApplications
+      .map((a) => a.id)
+      .filter((id) => id !== applicationId);
+
+    // Tickets on the members' other (now-discarded) applications are meaningless
+    // once those applications go, so drop them rather than leaving them orphaned.
+    if (discardedIds.length) {
+      await prisma.ticket.deleteMany({ where: { applicationId: { in: discardedIds } } });
+    }
+
     await prisma.studentProjectApply.deleteMany({
       where: { id: { in: otherApplications.map((a) => a.id) } },
     });
@@ -87,6 +141,11 @@ export const rejectApplication = async (req, res) => {
 
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
+    }
+
+    const denied = ownershipError(req, application.project);
+    if (denied) {
+      return res.status(denied.status).json({ message: denied.message });
     }
 
     const leaderId = application.members[0].studentId;
@@ -125,11 +184,15 @@ export const rejectApplication = async (req, res) => {
 // 📌 Fetch all approved teams
 export const getApprovedTeams = async (req, res) => {
   try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Access denied. Only teachers can view approved teams." });
+    }
+
+    // Scoped to the caller's own projects. MyTeams.jsx already filters
+    // client-side; doing it here stops the full roster leaving the server.
     const teams = await prisma.teamApproved.findMany({
-      include: {
-        project: true,
-        members: { ...memberOrder, include: { student: true } },
-      },
+      where: { project: { teacherId: req.user._id } },
+      include: teamWithMembers,
     });
     teams.forEach(shapeTeam);
     res.status(200).json({ teams });
@@ -143,22 +206,32 @@ export const removeMemberFromTeam = async (req, res) => {
   try {
     const { teamId, memberId } = req.params; // memberId here is the *student's* id, matching old $pull semantics
 
+    const team = await prisma.teamApproved.findUnique({
+      where: { id: teamId },
+      include: { project: true },
+    });
+    if (!team) {
+      return res.status(404).json({ message: "Team not found" });
+    }
+
+    const denied = ownershipError(req, team.project);
+    if (denied) {
+      return res.status(denied.status).json({ message: denied.message });
+    }
+
     const existingMember = await prisma.teamMember.findFirst({
       where: { teamId, studentId: memberId },
     });
     if (!existingMember) {
-      return res.status(404).json({ message: "Team not found" });
+      return res.status(404).json({ message: "Member not found in this team" });
     }
 
     await prisma.teamMember.delete({ where: { id: existingMember.id } });
 
     const updatedTeam = await prisma.teamApproved.findUnique({
       where: { id: teamId },
-      include: { project: true, members: { ...memberOrder, include: { student: true } } },
+      include: teamWithMembers,
     });
-    if (!updatedTeam) {
-      return res.status(404).json({ message: "Team not found" });
-    }
 
     await prisma.notification.create({
       data: {
@@ -182,9 +255,17 @@ export const addMemberToTeam = async (req, res) => {
     const { teamId } = req.params;
     const { studentId } = req.body;
 
-    const team = await prisma.teamApproved.findUnique({ where: { id: teamId } });
+    const team = await prisma.teamApproved.findUnique({
+      where: { id: teamId },
+      include: { project: true },
+    });
     if (!team) {
       return res.status(404).json({ message: "Team not found" });
+    }
+
+    const denied = ownershipError(req, team.project);
+    if (denied) {
+      return res.status(denied.status).json({ message: denied.message });
     }
 
     const alreadyInTeam = await prisma.teamMember.findFirst({ where: { studentId } });
@@ -205,7 +286,7 @@ export const addMemberToTeam = async (req, res) => {
 
     const updatedTeam = await prisma.teamApproved.findUnique({
       where: { id: teamId },
-      include: { project: true, members: { ...memberOrder, include: { student: true } } },
+      include: teamWithMembers,
     });
 
     await prisma.notification.create({

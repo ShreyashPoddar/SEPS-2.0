@@ -6,8 +6,14 @@ const API = axios.create({
     ? "http://localhost:3050/api"
     : `https://${import.meta.env.VITE_BACKEND_URL || "ececonnect-production.up.railway.app"}/api`,
   withCredentials: true,
-  timeout: 3000,
+  // A cold TiDB serverless connection routinely takes longer than 3s; at that
+  // setting real responses were being discarded as timeouts.
+  timeout: 15000,
 });
+
+// Offline demo mode. Off unless VITE_USE_MOCK=true is set explicitly, so a
+// failing backend surfaces as an error instead of silently becoming fake data.
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 
 // --- In-Memory / LocalStorage Mock Database for offline & development demo ---
 const STORAGE_KEY_USER = "seps_current_user";
@@ -62,14 +68,25 @@ function getStoredProjects() {
   return [];
 }
 
-// Wrapper for resilient execution with mock fallback
+// Wrapper for resilient execution with mock fallback.
+// The mock branch only runs when VITE_USE_MOCK=true. Without it, a network
+// failure propagates to the caller's .catch so the UI shows a real error —
+// masking these was hiding genuine backend outages behind plausible data.
 async function withFallback(apiCall, mockResolver) {
   try {
     const res = await apiCall();
     return res;
   } catch (err) {
-    // If backend server is unreachable / network failed, fallback gracefully to mock handler
-    if (!err.response || err.code === "ERR_NETWORK" || err.code === "ECONNABORTED" || err.message?.includes("Network Error")) {
+    const isNetworkFailure =
+      !err.response ||
+      err.code === "ERR_NETWORK" ||
+      err.code === "ECONNABORTED" ||
+      err.message?.includes("Network Error");
+
+    if (isNetworkFailure && USE_MOCK) {
+      console.warn(
+        `[api] ${err.config?.method?.toUpperCase() || "REQUEST"} ${err.config?.url || "?"} failed (${err.code || "no response"}) — serving MOCK data because VITE_USE_MOCK=true`
+      );
       const mockData = await mockResolver();
       return { data: mockData };
     }
@@ -417,6 +434,20 @@ export const cancelTicket = (ticketId) =>
     }
   );
 
+// --- FACULTY TICKET REVIEW ---
+export const getFacultyTickets = () =>
+  withFallback(
+    () => API.get("/tickets"),
+    () => []
+  );
+
+// action: "review" | "approve" | "reject"
+export const actOnTicket = (ticketId, action, remarks) =>
+  withFallback(
+    () => API.put(`/tickets/${ticketId}`, { action, remarks }),
+    () => ({ message: `Ticket ${action} recorded locally (offline demo mode).` })
+  );
+
 export const getApplicationsForProject = (projectId) =>
   withFallback(
     () => API.get(`/student/${projectId}`),
@@ -460,22 +491,29 @@ export const respondToInvitation = (data) =>
 export const getNotifications = () =>
   withFallback(
     () => API.get("/notifications/me"),
-    () => [
-      {
-        _id: "n1",
-        title: "Global Deadline Reminder",
-        message: "Final capstone project proposals must be submitted before the department deadline.",
-        createdAt: new Date().toISOString(),
-        read: false,
-      },
-      {
-        _id: "n2",
-        title: "Team Invitation Received",
-        message: "You have been invited by Aadyoth Sreeram to join their team.",
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-        read: true,
-      },
-    ]
+    // Shape must match the backend: { success, notifications }, with `type`
+    // driving the icon and `isRead` rather than `read`.
+    () => ({
+      success: true,
+      notifications: [
+        {
+          _id: "n1",
+          title: "Global Deadline Reminder",
+          message: "Final capstone project proposals must be submitted before the department deadline.",
+          type: "info",
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          _id: "n2",
+          title: "Project Application Approved",
+          message: "Your application for project \"Autonomous Drone Swarm Navigation\" has been approved.",
+          type: "success",
+          isRead: true,
+          createdAt: new Date(Date.now() - 3600000).toISOString(),
+        },
+      ],
+    })
   );
 
 export const deleteNotification = (id) =>
@@ -512,19 +550,24 @@ export const rejectApplication = (id) =>
 export const getApprovedTeams = () =>
   withFallback(
     () => API.get(`/team-approved`),
-    () => [
-      {
-        _id: "team_1",
-        projectTitle: "Autonomous Drone Swarm Navigation",
-        facultyName: "Dr. M. Sangeetha",
-        members: [
-          { fullName: "Aadyoth Sreeram", regNo: "RA2111003010001", email: "aadyoth@srmist.edu.in" },
-          { fullName: "Riyan Kothari", regNo: "RA2111003010002", email: "riyan@srmist.edu.in" },
-          { fullName: "Suhas Manjunath", regNo: "RA2111003010003", email: "suhas@srmist.edu.in" },
-        ],
-        status: "Approved",
-      },
-    ]
+    // Shape must match the backend: { teams: [...] }, each member carrying a
+    // populated `studentId` object — MyTeams.jsx reads member.studentId._id.
+    () => ({
+      teams: [
+        {
+          _id: "team_1",
+          projectTitle: "Autonomous Drone Swarm Navigation",
+          facultyName: "Dr. M. Sangeetha",
+          members: mockStudents.slice(0, 3).map((s) => ({
+            _id: `tm_${s._id}`,
+            name: s.fullName,
+            regNo: s.regNo,
+            studentId: { _id: s._id, fullName: s.fullName, email: s.email, regNo: s.regNo, department: s.department },
+          })),
+          status: "Approved",
+        },
+      ],
+    })
   );
 
 export const removeTeamMember = (teamId, memberId) =>
@@ -556,22 +599,30 @@ export const getStudentInfo = (studentId) =>
 export const getStatistics = () =>
   withFallback(
     () => API.get("/statistics"),
+    // Keys must match backend/controllers/statistics.controller.js — the old
+    // mock returned totalStudents/domainDistribution/batchStats, none of which
+    // StatisticsReport.jsx reads, so every figure rendered as undefined.
     () => ({
-      totalStudents: 2048,
-      registeredTeams: 512,
-      approvedTeams: 489,
-      pendingApplications: 23,
-      domainDistribution: [
-        { domain: "Embedded Systems and IoT", count: 142 },
-        { domain: "VLSI Design", count: 98 },
-        { domain: "AI/ML/DL based applications", count: 125 },
-        { domain: "Automation and Robotics", count: 64 },
-        { domain: "Wireless Communication", count: 48 },
-        { domain: "Biomedical Electronics", count: 35 },
+      teacherCount: 24,
+      studentCount: 2048,
+      projectCount: 132,
+      applicationCount: 512,
+      groupCount: 489,
+      individualCount: 23,
+      teachersWithProjects: [
+        { name: "Dr. M. Sangeetha", email: "sangeetm@srmist.edu.in", projects: ["Autonomous Drone Swarm Navigation"] },
       ],
-      batchStats: {
-        "2023-2027": { total: 1024, matched: 998 },
-        "2022-2026": { total: 1024, matched: 1010 },
-      },
+      teachersWithoutProjects: [
+        { name: "Dr. K. Vadivukkarasi", email: "vadivukk@srmist.edu.in" },
+      ],
+      studentsWithApplications: mockStudents.slice(0, 3).map((s) => ({ name: s.fullName, email: s.email, regNo: s.regNo })),
+      studentsWithoutApplications: mockStudents.slice(3).map((s) => ({ name: s.fullName, email: s.email, regNo: s.regNo })),
+      groupDetails: [
+        {
+          projectTitle: "Autonomous Drone Swarm Navigation",
+          teacherName: "Dr. M. Sangeetha",
+          students: mockStudents.slice(0, 3).map((s) => ({ name: s.fullName, regNo: s.regNo })),
+        },
+      ],
     })
   );

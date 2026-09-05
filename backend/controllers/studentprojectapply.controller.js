@@ -45,13 +45,23 @@ export const applyToProject = async (req, res) => {
     ];
 
     if (applicationType === "group") {
-      if (!members || members.length !== 2) {
+      // ApplyModal sends the leader as the first entry of `members`; older
+      // callers send only the other two. Normalize to "everyone but the leader"
+      // so both shapes are accepted and the leader is never matched against
+      // itself in the cohort / cross-branch checks below.
+      const isLeaderEntry = (m) =>
+        (m.studentId && m.studentId === leader._id) ||
+        (m.regNo && leader.regNo && m.regNo === leader.regNo);
+
+      const otherMembers = (members || []).filter((m) => !isLeaderEntry(m));
+
+      if (otherMembers.length !== 2) {
         return res.status(400).json({
           message: "A group application must include exactly two other members.",
         });
       }
 
-      for (const member of members) {
+      for (const member of otherMembers) {
         const orClauses = [];
         if (member.regNo) orClauses.push({ regNo: member.regNo });
         if (member.studentId) orClauses.push({ id: member.studentId });
@@ -113,10 +123,17 @@ export const applyToProject = async (req, res) => {
     });
     application._id = application.id;
 
-    res.status(201).json({
+    const response = {
       message: `Application for Priority ${priority} submitted successfully!`,
       application,
-    });
+    };
+
+    if (hasCrossBranch) {
+      response.warning =
+        "Cross-Branch Team: Your team includes a student from a different department. Please make sure this is intended.";
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error("Apply to project error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -329,7 +346,51 @@ export const getMyApplications = async (req, res) => {
       submittedAt: app.createdAt || app.appliedAt,
     }));
 
-    res.status(200).json(formatted);
+    // Approval deletes the underlying application, so a student on an approved
+    // team would otherwise see nothing here. Return their approved teams in the
+    // same shape; entries carrying `teamId` are teams, and the ticket flow uses
+    // that to file against the team instead of a (now gone) application.
+    const teams = await prisma.teamApproved.findMany({
+      where: { members: { some: { studentId } } },
+      include: {
+        project: { select: { id: true, projectTitle: true, facultyName: true, domain: true, description: true } },
+        members: {
+          ...memberOrder,
+          include: { student: { select: { department: true, internshipStatus: true } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const formattedTeams = teams.map((team) => {
+      const teamMembers = team.members.map((m) => ({
+        studentId: m.studentId,
+        name: m.name,
+        regNo: m.regNo,
+        department: m.student?.department || "Dept of ECE",
+        internshipStatus: m.student?.internshipStatus || "regular",
+        status: "approved",
+      }));
+
+      // TeamApproved doesn't carry these, so derive them from the roster the
+      // same way applyToProject does.
+      const leadDept = teamMembers[0]?.department;
+      return {
+        _id: team.id,
+        teamId: team.id,
+        projectId: team.project?.id,
+        projectTitle: team.project?.projectTitle || "Capstone Project",
+        facultyName: team.facultyName || team.project?.facultyName || "Faculty Advisor",
+        priority: 1,
+        status: "approved",
+        cohortTrack: teamMembers[0]?.internshipStatus || "regular",
+        hasCrossBranch: teamMembers.some((m) => m.department !== leadDept),
+        members: teamMembers,
+        submittedAt: team.approvedAt || team.createdAt,
+      };
+    });
+
+    res.status(200).json([...formattedTeams, ...formatted]);
   } catch (error) {
     console.error("Get my applications error:", error);
     res.status(500).json({ message: "Server error fetching applications", error: error.message });
@@ -339,11 +400,35 @@ export const getMyApplications = async (req, res) => {
 // Raise a team member modification ticket
 export const raiseTicket = async (req, res) => {
   try {
-    const { applicationId, projectTitle, facultyName, targetMember, changeType, requestedChanges, reason } = req.body;
+    const { applicationId, teamId, projectTitle, facultyName, targetMember, changeType, requestedChanges, reason } = req.body;
     const studentId = req.user._id;
 
-    if (!applicationId || !targetMember || !changeType || !reason) {
+    if ((!applicationId && !teamId) || !targetMember || !changeType || !reason) {
       return res.status(400).json({ message: "All required ticket fields must be provided." });
+    }
+
+    // A ticket hangs off either a pending application or an approved team, and
+    // the caller must belong to whichever they named. Without this check an
+    // unknown id surfaces as a raw Prisma foreign-key error, and any student
+    // could file a ticket against another team's roster.
+    if (teamId) {
+      const teamMembership = await prisma.teamMember.findFirst({
+        where: { studentId, teamId },
+      });
+      if (!teamMembership) {
+        return res.status(404).json({
+          message: "Team not found, or you are not a member of it.",
+        });
+      }
+    } else {
+      const membership = await prisma.applicationMember.findFirst({
+        where: { studentId, applicationId },
+      });
+      if (!membership) {
+        return res.status(404).json({
+          message: "Application not found, or you are not a member of it.",
+        });
+      }
     }
 
     const ticketId = "TCK-" + Math.floor(1000 + Math.random() * 9000);
@@ -351,7 +436,8 @@ export const raiseTicket = async (req, res) => {
     const newTicket = await prisma.ticket.create({
       data: {
         ticketId,
-        applicationId,
+        applicationId: teamId ? null : applicationId,
+        teamId: teamId || null,
         studentId,
         projectTitle: projectTitle || "Capstone Project",
         facultyName: facultyName || "Faculty Guide",
@@ -413,6 +499,15 @@ export const cancelTicket = async (req, res) => {
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found or unauthorized." });
+    }
+
+    // Once a coordinator has actioned a ticket it is a record of a decision —
+    // and for an approved one, of a roster change that already happened. Only
+    // an un-actioned request can be withdrawn.
+    if (ticket.status === "approved" || ticket.status === "rejected") {
+      return res.status(400).json({
+        message: `Ticket ${ticket.ticketId} has already been ${ticket.status} by your faculty guide and can no longer be cancelled.`,
+      });
     }
 
     await prisma.ticket.delete({ where: { id: ticket.id } });

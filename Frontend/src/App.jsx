@@ -20,6 +20,7 @@ import MyTeams from "./pages/MyTeams.jsx"; // Import the new page
 import SetGlobalDeadline from "./pages/SetGlobalDeadline.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import StatisticsReport from "./pages/StatisticsReport.jsx";
+import TeacherTickets from "./pages/TeacherTickets.jsx";
 import { useEffect, useState } from "react";
 
 import { getCurrentUser } from "./api";
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/teacher/my-teams" element={<MyTeams />} />
         <Route path="/teacher/set-global-deadline" element={<SetGlobalDeadlineWrapper />} />
         <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
+        <Route path="/teacher/tickets" element={<TeacherTickets />} />
       </Routes>
     </Router>
   );

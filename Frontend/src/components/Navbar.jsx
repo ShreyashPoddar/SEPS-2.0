@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, Bell, Users, BookOpen } from 'lucide-react';
+import { LogOut, User, Bell, Users, BookOpen, Ticket } from 'lucide-react';
 
 export default function Navbar({ user, handleLogout, notificationCount }) {
   const navigate = useNavigate();
@@ -59,6 +59,15 @@ export default function Navbar({ user, handleLogout, notificationCount }) {
             className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-full shadow text-sm transition-colors"
           >
             <Users className="w-4 h-4" /> My Teams
+          </Link>
+        )}
+        {/* Member change tickets awaiting faculty review */}
+        {user?.role === 'teacher' && (
+          <Link
+            to="/teacher/tickets"
+            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-full shadow text-sm transition-colors"
+          >
+            <Ticket className="w-4 h-4" /> Change Tickets
           </Link>
         )}
 

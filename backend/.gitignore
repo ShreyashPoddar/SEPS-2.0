@@ -1,3 +1,6 @@
 .env
 node_modules
 .dockerignore
+# Runtime logs from running the server detached
+server.log
+server.err.log

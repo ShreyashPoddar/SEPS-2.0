@@ -15,6 +15,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 import infoRoutes from "./routes/info.routes.js";
 import globalDeadlineRoutes from "./routes/globalDeadline.routes.js";
 import statisticsRoutes from "./routes/statistics.routes.js";
+import ticketRoutes from "./routes/ticket.routes.js";
 
 // Load environment variables
 dotenv.config();
@@ -56,6 +57,7 @@ app.use("/api/team-approved", teamApprovedRoutes);
 app.use("/api/info", infoRoutes);
 app.use("/api/global-deadline", globalDeadlineRoutes);
 app.use("/api/statistics", statisticsRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // Catch-all for unknown routes
 app.all("*", (req, res) => {

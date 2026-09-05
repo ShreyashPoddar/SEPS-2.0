@@ -136,7 +136,11 @@ export default function ChangeTicketModal({
     setIsSubmitting(true);
 
     const payload = {
-      applicationId: application._id,
+      // Entries carrying `teamId` are approved teams — the underlying
+      // application is deleted on approval, so the ticket attaches to the team.
+      ...(application.teamId
+        ? { teamId: application.teamId }
+        : { applicationId: application._id }),
       projectTitle: application.projectTitle || "Selected Project",
       facultyName: application.facultyName,
       targetMember: {

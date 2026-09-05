@@ -227,6 +227,9 @@ export default function ApplyModal({ project, currentUser, onClose, onApplySucce
     try {
       const res = await applyToProject(applicationPayload);
       toast.success(res.data?.message || "Application submitted successfully!");
+      if (res.data?.warning) {
+        toast(res.data.warning, { icon: "⚠️", duration: 6000 });
+      }
       if (onApplySuccess) onApplySuccess(project._id);
       onClose();
     } catch (err) {

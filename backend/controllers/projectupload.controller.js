@@ -97,8 +97,24 @@ const getProjectById = async (req, res) => {
   }
 };
 
+// A project may only be modified by the teacher who created it.
+const denyIfNotOwner = async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+  if (!project) {
+    res.status(404).json({ message: "Project not found" });
+    return true;
+  }
+  if (req.user.role !== "teacher" || project.teacherId !== req.user._id) {
+    res.status(403).json({ message: "Access denied. You can only modify your own projects." });
+    return true;
+  }
+  return false;
+};
+
 const updateProject = async (req, res) => {
   try {
+    if (await denyIfNotOwner(req, res)) return;
+
     const { projectTitle, description, stream, domain } = req.body;
 
     let updatedProject;
@@ -123,6 +139,8 @@ const updateProject = async (req, res) => {
 
 const deleteProject = async (req, res) => {
   try {
+    if (await denyIfNotOwner(req, res)) return;
+
     const projectId = req.params.id;
 
     try {

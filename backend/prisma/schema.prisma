@@ -163,6 +163,7 @@ model TeamApproved {
   updatedAt       DateTime        @updatedAt
 
   members         TeamMember[]
+  tickets         Ticket[]
 
   @@index([projectId])
 }
@@ -203,8 +204,15 @@ model GlobalDeadline {
 model Ticket {
   id                 String              @id @default(cuid())
   ticketId           String              @unique
-  applicationId      String
-  application        StudentProjectApply @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  // A ticket is raised against a pending application, and is re-pointed at the
+  // approved team when faculty approve it. Approval deletes the application, so
+  // `applicationId` is nullable with SetNull rather than Cascade — otherwise the
+  // ticket history was destroyed at exactly the moment a roster change matters.
+  // Exactly one of applicationId / teamId is set at any time.
+  applicationId      String?
+  application        StudentProjectApply? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  teamId             String?
+  team               TeamApproved?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
   studentId          String
   student             User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
   projectTitle       String              @default("")
@@ -224,5 +232,6 @@ model Ticket {
   updatedAt          DateTime            @updatedAt
 
   @@index([applicationId])
+  @@index([teamId])
   @@index([studentId])
 }

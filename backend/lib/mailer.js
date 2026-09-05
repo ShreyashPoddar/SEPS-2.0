@@ -4,16 +4,27 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // --- Environment Variable Check ---
-// This block will print an error in your console if any required variables are missing.
+// Email is optional: the app runs fine without it (verification sends are
+// currently disabled in the signup controller). Report missing config once, as
+// a warning rather than a "FATAL ERROR" the server then happily survives.
 const requiredEnvVars = ['SENDGRID_API_KEY', 'SENDER_EMAIL', 'CLIENT_URL'];
-for (const varName of requiredEnvVars) {
-  if (!process.env[varName]) {
-    console.error(`❌ FATAL ERROR: Environment variable ${varName} is not set. Email functionality may fail.`);
-  }
+const missingEnvVars = requiredEnvVars.filter((name) => !process.env[name]);
+
+export const isMailConfigured = missingEnvVars.length === 0;
+
+if (!isMailConfigured) {
+  console.warn(
+    `✉️  Email disabled — missing/empty in .env: ${missingEnvVars.join(', ')}. ` +
+    `Everything else runs normally; set these to enable verification and reset emails.`
+  );
 }
 
 // --- SendGrid Configuration ---
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// Only configure when a key is actually present; setApiKey('') makes the SDK
+// complain that the key doesn't start with "SG." on every boot.
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 const SENDER_EMAIL = process.env.SENDER_EMAIL;
 const PROJECT_NAME = process.env.PROJECT_NAME || "Project Connect SRM";
@@ -42,6 +53,11 @@ export const sendVerificationEmail = async (to, name, token) => {
       </div>
     `,
   };
+
+  if (!isMailConfigured) {
+    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
+    return;
+  }
 
   try {
     await sgMail.send(msg);
@@ -75,6 +91,11 @@ export const sendWelcomeEmail = async (to, name) => {
     `,
   };
 
+  if (!isMailConfigured) {
+    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
+    return;
+  }
+
   try {
     await sgMail.send(msg);
     console.log(`✅ Welcome email sent successfully to ${to}`);
@@ -107,6 +128,11 @@ export const sendResetEmail = async (to, name, token) => {
       </div>
     `,
   };
+
+  if (!isMailConfigured) {
+    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
+    return;
+  }
 
   try {
     await sgMail.send(msg);
