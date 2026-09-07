@@ -39,7 +39,7 @@ const __dirname = path.dirname(__filename);
 // can send credentialed (cookie) requests — prevents token leakage to arbitrary origins.
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
-  : ["http://localhost:5176", "http://localhost:5173"];
+  : ["http://localhost:5176", "http://localhost:5173", "https://seps.srmecho.in"];
 
 app.use(
   cors({
@@ -95,8 +95,8 @@ const localPublicPath = path.resolve(__dirname, "./public");
 const clientDist = fs.existsSync(frontendDistPath)
   ? frontendDistPath
   : fs.existsSync(localPublicPath)
-  ? localPublicPath
-  : null;
+    ? localPublicPath
+    : null;
 
 if (clientDist) {
   console.log(`📦 Serving static frontend from: ${clientDist}`);
