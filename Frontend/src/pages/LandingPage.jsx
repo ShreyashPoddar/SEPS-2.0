@@ -1,10 +1,31 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import SlicedWaves from "../components/SlicedWaves";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
+import { getCurrentUser } from "../api";
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then((res) => {
+        if (res?.data?.role === "teacher") {
+          navigate("/teacher-dashboard", { replace: true });
+        } else if (res?.data?.role === "student") {
+          navigate("/student-dashboard", { replace: true });
+        } else if (res?.data?.role) {
+          setCurrentUser(res.data);
+        }
+      })
+      .catch(() => {
+        setCurrentUser(null);
+      });
+  }, [navigate]);
+
+  const dashboardPath = currentUser?.role === "teacher" ? "/teacher-dashboard" : "/student-dashboard";
   return (
     <div className="relative w-screen h-screen min-h-screen bg-white text-slate-900 overflow-hidden flex flex-col justify-between selection:bg-blue-600 selection:text-white">
       {/* Background Sliced Waves (Soft high-contrast wave ripple on white) */}
@@ -68,11 +89,6 @@ export default function LandingPage() {
                   About
                 </Link>
               </motion.div>
-              <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
-                <Link to="/signup" className="hover:text-black transition">
-                  Sign up
-                </Link>
-              </motion.div>
             </nav>
 
             <div className="flex items-center">
@@ -81,12 +97,21 @@ export default function LandingPage() {
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
-                <Link
-                  to="/login"
-                  className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-black hover:bg-slate-800 border-2 border-black rounded-full transition-colors shadow-md block"
-                >
-                  Log in
-                </Link>
+                {currentUser ? (
+                  <Link
+                    to={dashboardPath}
+                    className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 border-2 border-black rounded-full transition-colors shadow-md block"
+                  >
+                    Go to Dashboard →
+                  </Link>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-black hover:bg-slate-800 border-2 border-black rounded-full transition-colors shadow-md block"
+                  >
+                    Log in
+                  </Link>
+                )}
               </motion.div>
             </div>
           </div>
@@ -145,10 +170,10 @@ export default function LandingPage() {
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Link
-              to="/signup"
+              to={currentUser ? dashboardPath : "/login"}
               className="px-7 py-3 rounded-full text-sm sm:text-base font-bold text-white bg-black hover:bg-slate-800 border-2 border-black shadow-xl shadow-black/10 transition-colors block"
             >
-              Get started
+              {currentUser ? "Open Dashboard" : "Sign In to Portal"}
             </Link>
           </motion.div>
 

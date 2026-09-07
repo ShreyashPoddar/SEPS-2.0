@@ -2,13 +2,16 @@ import axios from "axios";
 
 // Base API instance
 const API = axios.create({
-  baseURL: import.meta.env.DEV
+  baseURL: import.meta.env.VITE_API_URL
+    ? (import.meta.env.VITE_API_URL.replace(/\/+$/, "").endsWith("/api")
+        ? import.meta.env.VITE_API_URL.replace(/\/+$/, "")
+        : `${import.meta.env.VITE_API_URL.replace(/\/+$/, "")}/api`)
+    : import.meta.env.DEV
     ? "http://localhost:3050/api"
-    : `https://${import.meta.env.VITE_BACKEND_URL || "ececonnect-production.up.railway.app"}/api`,
+    : "/api",
   withCredentials: true,
-  // A cold TiDB serverless connection routinely takes longer than 3s; at that
-  // setting real responses were being discarded as timeouts.
-  timeout: 15000,
+  // Allow up to 30s for remote TiDB serverless wake-up latency
+  timeout: 30000,
 });
 
 // Offline demo mode. Off unless VITE_USE_MOCK=true is set explicitly, so a
@@ -114,6 +117,30 @@ export const setGlobalDeadline = (deadline) =>
   );
 
 // --- AUTH ROUTES ---
+export const identifyUser = (data) =>
+  withFallback(
+    () => API.post("/auth/identify", data),
+    () => {
+      const id = (data.identifier || "").trim();
+      const lower = id.toLowerCase();
+      if (lower.startsWith("ra")) {
+        return {
+          role: "student",
+          regNo: id.toUpperCase(),
+          fullName: "SRM Student",
+          message: "Please enter your password to continue.",
+        };
+      }
+      return {
+        role: "teacher",
+        email: lower.includes("@") ? lower : `${lower}@srmist.edu.in`,
+        fullName: "Faculty Member",
+        hasPassword: true,
+        message: "Please enter your password to continue.",
+      };
+    }
+  );
+
 export const signupUser = (data) =>
   withFallback(
     () => API.post("/auth/signup", data),
@@ -135,8 +162,8 @@ export const signupUser = (data) =>
     }
   );
 
-export const loginUser = (data) =>
-  withFallback(
+export const loginUser = async (data) => {
+  const res = await withFallback(
     () => API.post("/auth/login", {
       identifier: data.identifier || data.email || data.regNo,
       email: data.email || data.identifier,
@@ -177,14 +204,26 @@ export const loginUser = (data) =>
     }
   );
 
-export const logoutUser = () =>
-  withFallback(
-    () => API.post("/auth/logout"),
-    () => {
-      setStoredUser(null);
-      return { message: "Logged out" };
-    }
-  );
+  if (res?.data?.role || res?.data?.user?.role) {
+    setStoredUser(res.data.user || res.data);
+  }
+  return res;
+};
+
+export const logoutUser = async () => {
+  try {
+    const res = await withFallback(
+      () => API.post("/auth/logout"),
+      () => {
+        setStoredUser(null);
+        return { message: "Logged out" };
+      }
+    );
+    return res;
+  } finally {
+    setStoredUser(null);
+  }
+};
 
 export const forgotPassword = (data) =>
   withFallback(
@@ -195,39 +234,91 @@ export const forgotPassword = (data) =>
     () => ({ message: `Password reset link has been dispatched for ${data.identifier || data.email || "your account"}.` })
   );
 
-export const getCurrentUser = () =>
-  withFallback(
-    () => API.get("/auth/check"),
-    () => {
-      let u = getStoredUser();
-      if (!u) {
-        // Default to a verified student if navigated directly
-        u = {
-          _id: "s1",
-          fullName: "Demo Student",
-          email: "student@srmist.edu.in",
-          regNo: "RA2111003010123",
-          role: "student",
-          isVerified: true,
-          department: "Dept of ECE",
-          internshipStatus: "regular",
-          internshipCompany: "",
-          domain: "Embedded Systems and IoT",
-          cgpa: 9.2,
-          skills: "Embedded C, RTOS, PCB Design, Python",
-        };
-        setStoredUser(u);
-      } else {
-        if (!u.department) u.department = "Dept of ECE";
-        if (!u.internshipStatus) u.internshipStatus = "regular";
+export const getCurrentUser = async () => {
+  try {
+    const res = await withFallback(
+      () => API.get("/auth/check"),
+      () => {
+        let u = getStoredUser();
+        if (!u) {
+          // Default to a verified student if navigated directly
+          u = {
+            _id: "s1",
+            fullName: "Demo Student",
+            email: "student@srmist.edu.in",
+            regNo: "RA2111003010123",
+            role: "student",
+            isVerified: true,
+            department: "Dept of ECE",
+            internshipStatus: "regular",
+            internshipCompany: "",
+            domain: "Embedded Systems and IoT",
+            cgpa: 9.2,
+            skills: "Embedded C, RTOS, PCB Design, Python",
+          };
+          setStoredUser(u);
+        } else {
+          if (!u.department) u.department = "Dept of ECE";
+          if (!u.internshipStatus) u.internshipStatus = "regular";
+        }
+        return u;
       }
-      return u;
+    );
+    if (res?.data) {
+      setStoredUser(res.data);
     }
-  );
+    return res;
+  } catch (err) {
+    if (err.response?.status === 401) {
+      setStoredUser(null);
+    }
+    throw err;
+  }
+};
+
+export const isStudentProfileComplete = (user) => {
+  if (!user || user.role !== "student") return true;
+  if (!user.isProfileComplete) return false;
+
+  const CGPA_FORMAT_REGEX = /^(?:10(?:\.0{1,2})?|[0-9](?:\.[0-9]{1,2})?)$/;
+  const LINKEDIN_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
+  const GITHUB_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
+  const isValidHttpUrl = (str) => {
+    if (!str || typeof str !== "string") return false;
+    const trimmed = str.trim();
+    if (!trimmed) return false;
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    try {
+      const parsed = new URL(withProto);
+      return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.includes(".");
+    } catch {
+      return false;
+    }
+  };
+
+  const hasCgpa = user.cgpa !== null && user.cgpa !== undefined &&
+    !isNaN(Number(user.cgpa)) && Number(user.cgpa) >= 0.01 && Number(user.cgpa) <= 10.00 &&
+    CGPA_FORMAT_REGEX.test(String(user.cgpa).trim());
+  const hasDept = Boolean(user.department && user.department.trim());
+  const hasPic = Boolean(user.profilePic && isValidHttpUrl(user.profilePic.trim()));
+  const hasLinkedin = Boolean(user.linkedinUrl && LINKEDIN_FORMAT_REGEX.test(user.linkedinUrl.trim()));
+  const hasGithub = Boolean(user.githubUrl && GITHUB_FORMAT_REGEX.test(user.githubUrl.trim()));
+  const hasResume = Boolean(user.resumeUrl && isValidHttpUrl(user.resumeUrl.trim()));
+
+  const isCorporate = user.internshipStatus === "internship";
+  const hasInternship = isCorporate
+    ? Boolean(user.internshipCompany && user.internshipCompany.trim().length >= 2 && user.internshipDuration && user.internshipDuration.trim().length >= 2)
+    : true;
+
+  return hasCgpa && hasDept && hasPic && hasLinkedin && hasGithub && hasResume && hasInternship;
+};
 
 export const updateProfile = (data) =>
   withFallback(
-    () => API.put("/auth/update-profile", data),
+    () => API.put("/auth/update-profile", {
+      ...data,
+      isProfileComplete: data.isProfileComplete !== undefined ? data.isProfileComplete : (Number(data.cgpa) > 0),
+    }),
     () => {
       const current = getStoredUser() || {};
       const hasInternship = Boolean(
@@ -235,7 +326,8 @@ export const updateProfile = (data) =>
         (data.internships && Array.isArray(data.internships) && data.internships.length > 0)
       );
       const computedStatus = data.internshipStatus || (hasInternship ? "internship" : "regular");
-      const u = { ...current, ...data, internshipStatus: computedStatus };
+      const isComplete = data.isProfileComplete !== undefined ? data.isProfileComplete : (Number(data.cgpa) > 0);
+      const u = { ...current, ...data, internshipStatus: computedStatus, isProfileComplete: isComplete };
       setStoredUser(u);
       return { message: "Profile updated successfully!", user: u };
     }
@@ -246,6 +338,18 @@ export const resetPassword = (data) =>
     () => API.post("/auth/reset-password", data),
     () => ({ message: "Password has been reset successfully!" })
   );
+
+// Student first-time login: submit institutional email to get an OTP
+export const verifyStudentEmail = (data) =>
+  withFallback(
+    () => API.post("/auth/verify-student-email", data),
+    () => ({ message: "OTP sent to your institutional email." })
+  );
+
+// Change password for logged-in user (requires current password)
+export const changePassword = (data) =>
+  API.post("/auth/change-password", data);
+
 
 // --- PROJECT ROUTES ---
 export const getAllProjects = () =>
@@ -433,6 +537,18 @@ export const cancelTicket = (ticketId) =>
       return { message: "Ticket cancelled successfully." };
     }
   );
+
+export const cancelPendingApplication = (applicationId) =>
+  withFallback(
+    () => API.delete(`/student/applications/${applicationId}`),
+    () => {
+      let apps = JSON.parse(localStorage.getItem(STORAGE_KEY_APPLICATIONS) || "[]");
+      apps = apps.filter((a) => a._id !== applicationId && a.id !== applicationId);
+      localStorage.setItem(STORAGE_KEY_APPLICATIONS, JSON.stringify(apps));
+      return { message: "Application cancelled successfully." };
+    }
+  );
+
 
 // --- FACULTY TICKET REVIEW ---
 export const getFacultyTickets = () =>

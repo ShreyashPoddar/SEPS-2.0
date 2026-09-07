@@ -1,15 +1,42 @@
 import React, { useEffect, useState } from "react";
-import { getCurrentUser, updateProfile, logoutUser } from "../api";
-import { useNavigate } from "react-router-dom";
-import { Loader, Save, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+import { getCurrentUser, updateProfile, logoutUser, changePassword, forgotPassword, resetPassword, isStudentProfileComplete } from "../api";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Loader, Save, AlertCircle, CheckCircle, ExternalLink, Lock, Eye, EyeOff, KeyRound, Mail, Send, ArrowRight } from 'lucide-react';
 import Navbar from "../components/Navbar";
 
 export default function StudentProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
+
+  // ── Change Password State ───────────────────────────────────────────────────
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // ── Forgot Password Inline State ────────────────────────────────────────────
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1: Send OTP, 2: Enter OTP & New Password
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotConfirmPass, setForgotConfirmPass] = useState('');
+  const [showForgotNew, setShowForgotNew] = useState(false);
+  const [showForgotConfirm, setShowForgotConfirm] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     getCurrentUser()
@@ -34,14 +61,158 @@ export default function StudentProfile() {
     setProfile({ ...profile, [name]: value });
   };
 
+  // ── Format Validation Helpers & Regexes ──────────────────────────────────
+  const CGPA_FORMAT_REGEX = /^(?:10(?:\.0{1,2})?|[0-9](?:\.[0-9]{1,2})?)$/;
+  const LINKEDIN_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
+  const GITHUB_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
+  
+  const isValidHttpUrl = (str) => {
+    if (!str || typeof str !== "string") return false;
+    const trimmed = str.trim();
+    if (!trimmed) return false;
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    try {
+      const parsed = new URL(withProto);
+      return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.includes(".");
+    } catch {
+      return false;
+    }
+  };
+
+  const normalizeUrl = (url) => {
+    if (!url || typeof url !== "string") return "";
+    const trimmed = url.trim();
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
+  // 1. CGPA: 0.01 to 10.00, max 2 decimals
+  const cgpaRaw = profile?.cgpa !== null && profile?.cgpa !== undefined ? String(profile.cgpa).trim() : "";
+  const cgpaNum = Number(cgpaRaw);
+  const isCgpaEmpty = !cgpaRaw;
+  const isCgpaValid = Boolean(
+    !isCgpaEmpty &&
+    !isNaN(cgpaNum) &&
+    cgpaNum >= 0.01 &&
+    cgpaNum <= 10.00 &&
+    CGPA_FORMAT_REGEX.test(cgpaRaw)
+  );
+
+  // 2. Department: Selected from valid SRM branches
+  const isDeptValid = Boolean(profile?.department && profile?.department.trim().length > 0);
+
+  // 3. Profile Picture: Must be valid HTTP/HTTPS URL
+  const picRaw = (profile?.profilePic || "").trim();
+  const isPicEmpty = !picRaw;
+  const isPicValid = Boolean(!isPicEmpty && isValidHttpUrl(picRaw));
+
+  // 4. LinkedIn: Must match https://linkedin.com/in/username
+  const linkedinRaw = (profile?.linkedinUrl || "").trim();
+  const isLinkedinEmpty = !linkedinRaw;
+  const isLinkedinValid = Boolean(!isLinkedinEmpty && LINKEDIN_FORMAT_REGEX.test(linkedinRaw));
+
+  // 5. GitHub: Must match https://github.com/username
+  const githubRaw = (profile?.githubUrl || "").trim();
+  const isGithubEmpty = !githubRaw;
+  const isGithubValid = Boolean(!isGithubEmpty && GITHUB_FORMAT_REGEX.test(githubRaw));
+
+  // 6. Resume / Portfolio: Must be valid HTTP/HTTPS URL
+  const resumeRaw = (profile?.resumeUrl || "").trim();
+  const isResumeEmpty = !resumeRaw;
+  const isResumeValid = Boolean(!isResumeEmpty && isValidHttpUrl(resumeRaw));
+
+  // 7. Capstone Track & Internship Experience
+  const isCorporate = profile?.internshipStatus === "internship";
+  const companyRaw = (profile?.internshipCompany || "").trim();
+  const durationRaw = (profile?.internshipDuration || "").trim();
+  const isCompanyValid = isCorporate ? companyRaw.length >= 2 : true;
+  const isDurationValid = isCorporate ? durationRaw.length >= 2 : true;
+  const isInternshipValid = isCorporate ? (isCompanyValid && isDurationValid) : true;
+
+  // Complete validity check
+  const isAllFieldsFilled = Boolean(
+    isCgpaValid &&
+    isDeptValid &&
+    isPicValid &&
+    isLinkedinValid &&
+    isGithubValid &&
+    isResumeValid &&
+    isInternshipValid
+  );
+
+  // Detailed Missing or Format Issues List
+  const formatIssues = [];
+  if (isCgpaEmpty) {
+    formatIssues.push("CGPA: Required (enter valid CGPA from 0.01 to 10.00)");
+  } else if (!isCgpaValid) {
+    formatIssues.push("CGPA: Invalid format (must be between 0.01 and 10.00 with max 2 decimals, e.g. 9.92)");
+  }
+
+  if (!isDeptValid) {
+    formatIssues.push("Department / Branch: Please select your SRM department");
+  }
+
+  if (isPicEmpty) {
+    formatIssues.push("Profile Picture: URL is required (or click 'Use SRM Avatar')");
+  } else if (!isPicValid) {
+    formatIssues.push("Profile Picture: Must be a valid web URL starting with https://");
+  }
+
+  if (isLinkedinEmpty) {
+    formatIssues.push("LinkedIn Profile: Required (e.g. https://www.linkedin.com/in/username)");
+  } else if (!isLinkedinValid) {
+    formatIssues.push("LinkedIn Profile: Must follow proper format: https://www.linkedin.com/in/username");
+  }
+
+  if (isGithubEmpty) {
+    formatIssues.push("GitHub Profile: Required (e.g. https://github.com/username)");
+  } else if (!isGithubValid) {
+    formatIssues.push("GitHub Profile: Must follow proper format: https://github.com/username");
+  }
+
+  if (isResumeEmpty) {
+    formatIssues.push("Resume / Portfolio: URL is required (e.g. Google Drive link or portfolio URL)");
+  } else if (!isResumeValid) {
+    formatIssues.push("Resume / Portfolio: Must be a valid web URL starting with https://");
+  }
+
+  if (isCorporate) {
+    if (!companyRaw) formatIssues.push("Internship: Company name is required");
+    else if (!isCompanyValid) formatIssues.push("Internship: Company name must be at least 2 characters");
+    if (!durationRaw) formatIssues.push("Internship: Duration is required (e.g. 6 Months)");
+    else if (!isDurationValid) formatIssues.push("Internship: Duration must be at least 2 characters");
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    if (!isAllFieldsFilled) {
+      showNotification(`Cannot proceed: Please correct the following format requirements:\n• ${formatIssues.join("\n• ")}`, "error");
+      return;
+    }
+
     setSaving(true);
     // eslint-disable-next-line no-unused-vars
     const { role, ...profileData } = profile;
-    updateProfile(profileData)
+
+    // Normalize URLs to canonical https:// format
+    const normalizedData = {
+      ...profileData,
+      cgpa: parseFloat(Number(profile.cgpa).toFixed(2)),
+      profilePic: normalizeUrl(profile.profilePic),
+      linkedinUrl: normalizeUrl(profile.linkedinUrl),
+      githubUrl: normalizeUrl(profile.githubUrl),
+      resumeUrl: normalizeUrl(profile.resumeUrl),
+      isProfileComplete: true,
+    };
+
+    updateProfile(normalizedData)
       .then(() => {
-        showNotification("Profile updated successfully!", "success");
+        showNotification("Profile successfully saved in database! Proceeding to dashboard...", "success");
+        setProfile((prev) => ({ ...prev, ...normalizedData, isProfileComplete: true }));
+        setTimeout(() => {
+          navigate("/student-dashboard");
+        }, 1200);
       })
       .catch((err) => {
         showNotification(err.response?.data?.message || "Failed to update profile.");
@@ -59,6 +230,85 @@ export default function StudentProfile() {
     }
   };
 
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      showNotification("New passwords do not match.");
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      showNotification("New password must be at least 6 characters.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await changePassword({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
+      showNotification("Password changed successfully!", "success");
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      showNotification(err.response?.data?.message || "Failed to change password.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const handleToggleForgot = (mode) => {
+    setForgotMode(mode);
+    setForgotStep(1);
+    setForgotOtp('');
+    setForgotNewPass('');
+    setForgotConfirmPass('');
+  };
+
+  const handleSendOtp = async () => {
+    if (!profile?.email) {
+      showNotification("No registered email found for your account.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await forgotPassword({ email: profile.email, identifier: profile.email });
+      showNotification(`OTP sent to ${profile.email}!`, "success");
+      setForgotStep(2);
+      setResendCooldown(30);
+    } catch (err) {
+      showNotification(err.response?.data?.message || "Failed to send OTP. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetWithOtp = async (e) => {
+    e.preventDefault();
+    if (!forgotOtp.trim()) {
+      showNotification("Please enter the 6-digit OTP sent to your email.");
+      return;
+    }
+    if (forgotNewPass !== forgotConfirmPass) {
+      showNotification("New passwords do not match.");
+      return;
+    }
+    if (forgotNewPass.length < 6) {
+      showNotification("New password must be at least 6 characters.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await resetPassword({
+        email: profile.email,
+        identifier: profile.email,
+        otp: forgotOtp.trim(),
+        password: forgotNewPass,
+      });
+      showNotification("Password reset successfully!", "success");
+      handleToggleForgot(false);
+    } catch (err) {
+      showNotification(err.response?.data?.message || "Failed to reset password. Please verify the OTP.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   if (loading || !profile) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center">
@@ -66,6 +316,12 @@ export default function StudentProfile() {
       </div>
     );
   }
+
+  const pwMatch = pwForm.confirmPassword && pwForm.newPassword === pwForm.confirmPassword;
+  const pwMismatch = pwForm.confirmPassword && pwForm.newPassword !== pwForm.confirmPassword;
+
+  const forgotMatch = forgotConfirmPass && forgotNewPass === forgotConfirmPass;
+  const forgotMismatch = forgotConfirmPass && forgotNewPass !== forgotConfirmPass;
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
@@ -77,132 +333,381 @@ export default function StudentProfile() {
       )}
       <div className="relative max-w-4xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar user={profile} handleLogout={handleLogout} />
+
+        {/* ── Mandatory Profile Completion Alert Banner ─────────────────────── */}
+        {!isStudentProfileComplete(profile) && (
+          <div className="mb-6 p-5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl shadow-md flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-extrabold text-amber-950 flex items-center gap-2">
+                <span>Action Required: Complete Your Student Profile</span>
+                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">Mandatory</span>
+              </h3>
+              <p className="text-xs font-medium text-amber-800 mt-1 leading-relaxed">
+                Before accessing the Capstone Project Dashboard, all required profile details below must be completely filled and saved to the database. The <strong>"Save &amp; Proceed to Dashboard"</strong> button will activate once all fields are complete.
+              </p>
+            </div>
+          </div>
+        )}
         
+        {/* ── Profile Info Form ─────────────────────────────────────────────── */}
         <section className="bg-white p-8 rounded-xl shadow-lg border border-slate-200">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex flex-col sm:flex-row items-center gap-6">
               <img
-                src={profile.profilePic || `https://placehold.co/120x120/E0E7FF/4F46E5?text=${profile.fullName.charAt(0)}`}
+                src={profile.profilePic || `https://placehold.co/120x120/E0E7FF/4F46E5?text=${profile.fullName ? profile.fullName.charAt(0) : "S"}`}
                 alt="Profile"
-                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
+                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md bg-slate-100"
               />
               <div className="flex-grow text-center sm:text-left">
                 <h2 className="text-3xl font-bold text-gray-800">{profile.fullName}</h2>
-                <p className="text-gray-500">{profile.email}</p>
+                <p className="text-gray-500">{profile.email || "Institutional email pending"}</p>
+                <div className="mt-2 flex flex-wrap gap-2 justify-center sm:justify-start">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    Reg No: {profile.regNo || "Not set"}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center gap-1">
+                    <span>🏛️</span> Section {profile.section?.name || profile.sectionName || "A"}
+                  </span>
+                  {isStudentProfileComplete(profile) ? (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Profile Completed
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Incomplete Profile
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-200">
-               <div>
-                <label className="text-sm font-medium text-gray-600">Registration Number</label>
-                <input type="text" name="regNo" value={profile.regNo || "Not set"} disabled className="w-full mt-1 px-4 py-2 bg-slate-200 border border-slate-300 rounded-lg text-gray-500 cursor-not-allowed" />
+            {/* ── Institutional Mentorship Allocations (RDBMS Relations) ─── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border-2 border-blue-200/80 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm flex-shrink-0">
+                  👨‍🏫
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase font-black text-blue-900 tracking-wider">Faculty Advisor</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-200 text-blue-950">Sec {profile.section?.name || profile.sectionName || "A"}</span>
+                  </div>
+                  <p className="text-xs font-extrabold text-slate-900 truncate">
+                    {profile.facultyAdvisor?.fullName || "Dr. M. K. Srilekha"}
+                  </p>
+                  <p className="text-[11px] text-slate-600 font-medium truncate">
+                    {profile.facultyAdvisor?.email || "srilekhm@srmist.edu.in"}
+                  </p>
+                </div>
               </div>
-               <div>
-                <label className="text-sm font-medium text-gray-600">CGPA</label>
-                <input type="number" name="cgpa" value={profile.cgpa ?? ""} min={0} max={10} step={0.01} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
+
+              <div className="flex items-center gap-3 sm:border-l sm:border-blue-200 sm:pl-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm flex-shrink-0">
+                  🏛️
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase font-black text-indigo-900 tracking-wider">Department HOD</span>
+                  <p className="text-xs font-extrabold text-slate-900 truncate">
+                    {profile.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
+                  </p>
+                  <p className="text-[11px] text-slate-600 font-medium truncate">
+                    {profile.departmentRel?.hod?.email || "hodece@srmist.edu.in"}
+                  </p>
+                </div>
               </div>
-               <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Department / Branch</label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-200">
+              {/* Registration Number */}
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-600">Registration Number</label>
+                <input type="text" name="regNo" value={profile.regNo || "Not set"} disabled className="w-full mt-1.5 px-4 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-slate-600 font-semibold cursor-not-allowed" />
+              </div>
+
+              {/* CGPA */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    CGPA <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  {isCgpaValid ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> Valid
+                    </span>
+                  ) : !isCgpaEmpty ? (
+                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
+                      Invalid (e.g. 9.92, max 10.00)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                      Required (0.01 - 10.00)
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  name="cgpa"
+                  value={profile.cgpa ?? ""}
+                  min={0.01}
+                  max={10}
+                  step={0.01}
+                  placeholder="e.g. 9.92"
+                  required
+                  onChange={handleChange}
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                />
+              </div>
+
+              {/* Department / Branch */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    Department / Branch <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  {isDeptValid ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> Selected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                      Required
+                    </span>
+                  )}
+                </div>
                 <select
                   name="department"
                   value={profile.department || "Dept of ECE"}
                   onChange={handleChange}
                   className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
                 >
-                  <option value="Dept of ECE">Dept of ECE (Electronics & Communication)</option>
+                  <option value="Dept of ECE">Dept of ECE (Electronics &amp; Communication)</option>
                   <option value="Dept of CSE">Dept of CSE (Computer Science)</option>
                   <option value="Dept of IT">Dept of IT (Information Technology)</option>
                   <option value="Dept of Mechanical">Dept of Mechanical Engineering</option>
                   <option value="Dept of Biomedical">Dept of Biomedical Engineering</option>
-                  <option value="Dept of EEE">Dept of EEE (Electrical & Electronics)</option>
+                  <option value="Dept of EEE">Dept of EEE (Electrical &amp; Electronics)</option>
                 </select>
               </div>
 
+              {/* Internship Experience & Capstone Track */}
               <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-amber-50/40 border-2 border-slate-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                      <span>🏢</span> Internship Experience & Corporate Host
+                      <span>🏢</span> Capstone Track &amp; Internship Status <span className="text-red-500 font-bold">*</span>
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Enter the company/organization and duration for internships you are doing or have done.
+                      Select whether you are working on an on-campus capstone or enrolled in a corporate internship.
                     </p>
                   </div>
-                  <div className="self-start sm:self-auto">
-                    {(profile.internshipCompany || profile.internshipDuration) ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 rounded-full text-xs font-black uppercase tracking-wider">
-                        💼 Corporate Internship Track
+                </div>
+
+                {/* Track Selector Toggle */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setProfile((prev) => ({ ...prev, internshipStatus: "regular" }))}
+                    className={`p-3.5 rounded-xl border-2 text-left transition flex items-center gap-3 cursor-pointer ${
+                      profile.internshipStatus !== "internship"
+                        ? "border-blue-600 bg-blue-50/90 text-blue-950 font-bold shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-medium"
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base ${
+                      profile.internshipStatus !== "internship" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                    }`}>
+                      🎓
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold flex items-center gap-1.5">
+                        <span>Regular On-Campus Track</span>
+                        {profile.internshipStatus !== "internship" && <CheckCircle className="w-3.5 h-3.5 text-blue-600" />}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal">Standard project on campus (No corporate company required)</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setProfile((prev) => ({ ...prev, internshipStatus: "internship" }))}
+                    className={`p-3.5 rounded-xl border-2 text-left transition flex items-center gap-3 cursor-pointer ${
+                      profile.internshipStatus === "internship"
+                        ? "border-amber-500 bg-amber-50/90 text-amber-950 font-bold shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-medium"
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base ${
+                      profile.internshipStatus === "internship" ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500"
+                    }`}>
+                      💼
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold flex items-center gap-1.5">
+                        <span>Corporate Internship Track</span>
+                        {profile.internshipStatus === "internship" && <CheckCircle className="w-3.5 h-3.5 text-amber-600" />}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal">Semester/6-month company internship (Requires company &amp; duration)</div>
+                    </div>
+                  </button>
+                </div>
+
+                {profile.internshipStatus === "internship" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-4 bg-white rounded-xl border border-amber-200 animate-in fade-in duration-200">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                          Company / Organization Name <span className="text-red-500 font-bold">*</span>
+                        </label>
+                        {isCompanyValid && companyRaw ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Filled
+                          </span>
+                        ) : companyRaw ? (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                            Min 2 characters
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                            Required
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        name="internshipCompany"
+                        value={profile.internshipCompany || ""}
+                        placeholder="e.g. Qualcomm, Amazon AWS, Bosch, ISRO"
+                        onChange={handleChange}
+                        className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                          Internship Duration / Term <span className="text-red-500 font-bold">*</span>
+                        </label>
+                        {isDurationValid && durationRaw ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Filled
+                          </span>
+                        ) : durationRaw ? (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                            Min 2 characters
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                            Required
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        name="internshipDuration"
+                        value={profile.internshipDuration || ""}
+                        placeholder="e.g. 6 Months (Jan - Jun 2026), 3 Months"
+                        onChange={handleChange}
+                        className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Profile Picture URL */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    Profile Picture URL <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {isPicValid ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Filled
+                      </span>
+                    ) : !isPicEmpty ? (
+                      <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                        Invalid URL (https://...)
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 border border-blue-300 text-blue-900 rounded-full text-xs font-black uppercase tracking-wider">
-                        🎓 Regular On-Campus Track
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        Required
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.fullName || "Student")}&background=0284c7&color=fff&bold=true`;
+                        setProfile((prev) => ({ ...prev, profilePic: avatarUrl }));
+                      }}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>⚡</span> Use SRM Avatar
+                    </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                      Company / Organization Name
-                    </label>
-                    <input
-                      type="text"
-                      name="internshipCompany"
-                      value={profile.internshipCompany || ""}
-                      placeholder="e.g. Qualcomm, Amazon AWS, Bosch, ISRO"
-                      onChange={handleChange}
-                      className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                      Internship Duration / Term
-                    </label>
-                    <input
-                      type="text"
-                      name="internshipDuration"
-                      value={profile.internshipDuration || ""}
-                      placeholder="e.g. 6 Months (Jan - Jun 2026), 3 Months"
-                      onChange={handleChange}
-                      className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
-                    />
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-500 mt-3 italic">
-                  💡 Note: Students with an active company & duration are automatically matched in the Corporate Internship cohort. Leave blank if you are doing a standard on-campus capstone.
-                </p>
+                <input
+                  type="text"
+                  name="profilePic"
+                  value={profile.profilePic || ""}
+                  onChange={handleChange}
+                  onBlur={() => {
+                    if (profile.profilePic?.trim() && !/^https?:\/\//i.test(profile.profilePic.trim())) {
+                      setProfile((p) => ({ ...p, profilePic: `https://${p.profilePic.trim()}` }));
+                    }
+                  }}
+                  placeholder="https://ui-avatars.com/api/?name=User... or click 'Use SRM Avatar'"
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
+                />
               </div>
 
-              <div className="md:col-span-2">
-                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Profile Picture URL</label>
-                <input type="text" name="profilePic" value={profile.profilePic || ""} onChange={handleChange} className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium" />
-              </div>
+              {/* LinkedIn & GitHub */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <span className="text-[#0A66C2]">💼</span> LinkedIn Profile URL
+                      <span className="text-[#0A66C2]">💼</span> LinkedIn Profile URL <span className="text-red-500 font-bold">*</span>
                     </label>
-                    {profile.linkedinUrl && (
-                      <a
-                        href={profile.linkedinUrl.startsWith("http") ? profile.linkedinUrl : `https://${profile.linkedinUrl}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-[#0A66C2] hover:underline font-bold flex items-center gap-1"
-                      >
-                        Preview <ExternalLink size={10} />
-                      </a>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isLinkedinValid ? (
+                        <>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Valid
+                          </span>
+                          <a
+                            href={normalizeUrl(profile.linkedinUrl)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-[#0A66C2] hover:underline font-bold flex items-center gap-1"
+                          >
+                            Preview <ExternalLink size={10} />
+                          </a>
+                        </>
+                      ) : !isLinkedinEmpty ? (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                          Must be https://www.linkedin.com/in/username
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          Required
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <input
                     type="url"
                     name="linkedinUrl"
                     value={profile.linkedinUrl || ""}
-                    placeholder="https://linkedin.com/in/username"
+                    placeholder="https://www.linkedin.com/in/username"
                     onChange={handleChange}
+                    onBlur={() => {
+                      if (profile.linkedinUrl?.trim() && !/^https?:\/\//i.test(profile.linkedinUrl.trim())) {
+                        setProfile((p) => ({ ...p, linkedinUrl: `https://${p.linkedinUrl.trim()}` }));
+                      }
+                    }}
                     className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
                   />
                 </div>
@@ -210,18 +715,33 @@ export default function StudentProfile() {
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <span className="text-slate-900">🐙</span> GitHub Profile URL
+                      <span className="text-slate-900">🐙</span> GitHub Profile URL <span className="text-red-500 font-bold">*</span>
                     </label>
-                    {profile.githubUrl && (
-                      <a
-                        href={profile.githubUrl.startsWith("http") ? profile.githubUrl : `https://${profile.githubUrl}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-slate-900 hover:underline font-bold flex items-center gap-1"
-                      >
-                        Preview <ExternalLink size={10} />
-                      </a>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isGithubValid ? (
+                        <>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Valid
+                          </span>
+                          <a
+                            href={normalizeUrl(profile.githubUrl)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-slate-900 hover:underline font-bold flex items-center gap-1"
+                          >
+                            Preview <ExternalLink size={10} />
+                          </a>
+                        </>
+                      ) : !isGithubEmpty ? (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                          Must be https://github.com/username
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          Required
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <input
                     type="url"
@@ -229,23 +749,371 @@ export default function StudentProfile() {
                     value={profile.githubUrl || ""}
                     placeholder="https://github.com/username"
                     onChange={handleChange}
+                    onBlur={() => {
+                      if (profile.githubUrl?.trim() && !/^https?:\/\//i.test(profile.githubUrl.trim())) {
+                        setProfile((p) => ({ ...p, githubUrl: `https://${p.githubUrl.trim()}` }));
+                      }
+                    }}
                     className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
                   />
                 </div>
               </div>
 
+              {/* Resume URL */}
               <div className="md:col-span-2">
-                <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Resume URL</label>
-                <input type="text" name="resumeUrl" value={profile.resumeUrl || ""} onChange={handleChange} className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 transition" />
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <span>📄</span> Resume / Portfolio URL <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {isResumeValid ? (
+                      <>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Valid
+                        </span>
+                        <a
+                          href={normalizeUrl(profile.resumeUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-cyan-700 hover:underline font-bold flex items-center gap-1"
+                        >
+                          Preview <ExternalLink size={10} />
+                        </a>
+                      </>
+                    ) : !isResumeEmpty ? (
+                      <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                        Invalid URL (must start with https://)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        Required
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  name="resumeUrl"
+                  value={profile.resumeUrl || ""}
+                  onChange={handleChange}
+                  onBlur={() => {
+                    if (profile.resumeUrl?.trim() && !/^https?:\/\//i.test(profile.resumeUrl.trim())) {
+                      setProfile((p) => ({ ...p, resumeUrl: `https://${p.resumeUrl.trim()}` }));
+                    }
+                  }}
+                  placeholder="https://drive.google.com/... or portfolio / PDF link"
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
+                />
               </div>
             </div>
 
-            <div className="pt-4 flex justify-end">
-              <button type="submit" disabled={saving} className="w-full md:w-auto flex items-center justify-center gap-2 py-3 px-6 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                {saving ? <><Loader className="animate-spin w-5 h-5" /> Saving...</> : <><Save className="w-5 h-5" /> Save Changes</>}
+            {/* ── Missing / Invalid Fields Checklist Banner ────────────────── */}
+            <div className="pt-2">
+              {!isAllFieldsFilled ? (
+                <div className="p-4 rounded-xl bg-amber-50/95 border-2 border-amber-300 text-amber-950 text-xs shadow-sm animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 font-bold mb-2">
+                    <AlertCircle className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                    <span>Cannot proceed to dashboard: All fields must match their proper formats ({formatIssues.length} remaining):</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 pl-4 sm:pl-6">
+                    {formatIssues.map((issue, idx) => (
+                      <div key={idx} className="flex items-start gap-2 font-semibold text-amber-900 text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 flex-shrink-0"></span>
+                        <span>{issue}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 text-xs shadow-sm flex items-center justify-between animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 font-bold">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                    <span>All profile fields are completed and properly formatted! Click below to save to database and proceed to your dashboard.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Submit Button ────────────────────────────────────────────── */}
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={!isAllFieldsFilled || saving}
+                title={!isAllFieldsFilled ? `Please correct formatting:\n• ${formatIssues.join("\n• ")}` : "Save and proceed to dashboard"}
+                className={`w-full md:w-auto flex items-center justify-center gap-2.5 py-3.5 px-8 font-extrabold rounded-xl text-sm transition-all duration-200 ${
+                  !isAllFieldsFilled || saving
+                    ? "bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none"
+                    : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-lg shadow-emerald-600/30 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                }`}
+              >
+                {saving ? (
+                  <>
+                    <Loader className="animate-spin w-5 h-5" />
+                    <span>Saving in database...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    {!isStudentProfileComplete(profile) ? (
+                      <>
+                        <span>Save &amp; Proceed to Dashboard</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <span>Save Changes</span>
+                    )}
+                  </>
+                )}
               </button>
             </div>
           </form>
+        </section>
+
+        {/* ── Change / Forgot Password Section ──────────────────────────────── */}
+        <section className="mt-6 bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+          {!forgotMode ? (
+            <div>
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
+                    <Lock className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-extrabold text-slate-900">Change Password</h3>
+                    <p className="text-xs text-slate-500 font-medium">Update your account password. You'll need your current password to confirm.</p>
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handlePasswordChange} className="space-y-4 max-w-lg">
+                {/* Current Password */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Current Password</label>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleForgot(true)}
+                      className="text-xs font-bold text-cyan-600 hover:text-cyan-800 hover:underline transition"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showCurrent ? "text" : "password"}
+                      placeholder="Enter your current password"
+                      value={pwForm.currentPassword}
+                      onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+                      required
+                      className="w-full pl-4 pr-11 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
+                    />
+                    <button type="button" onClick={() => setShowCurrent(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1">
+                      {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* New Password */}
+                <div>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">New Password</label>
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showNew ? "text" : "password"}
+                      placeholder="Min. 6 characters"
+                      value={pwForm.newPassword}
+                      onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+                      minLength={6}
+                      required
+                      className="w-full pl-4 pr-11 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
+                    />
+                    <button type="button" onClick={() => setShowNew(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1">
+                      {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password */}
+                <div>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Confirm New Password</label>
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showConfirm ? "text" : "password"}
+                      placeholder="Re-enter new password"
+                      value={pwForm.confirmPassword}
+                      onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
+                      minLength={6}
+                      required
+                      className={`w-full pl-4 pr-11 py-2.5 text-slate-900 bg-slate-50 border-2 rounded-xl focus:outline-none transition text-sm font-medium ${
+                        pwMismatch ? "border-red-400 focus:border-red-500" :
+                        pwMatch ? "border-emerald-400 focus:border-emerald-500" :
+                        "border-slate-300 focus:border-black"
+                      }`}
+                    />
+                    <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1">
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {pwMismatch && <p className="mt-1.5 text-[11px] font-bold text-red-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Passwords do not match</p>}
+                  {pwMatch && <p className="mt-1.5 text-[11px] font-bold text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Passwords match</p>}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={pwSaving || pwMismatch || !pwForm.currentPassword || !pwForm.newPassword || !pwForm.confirmPassword}
+                  className="flex items-center gap-2 py-2.5 px-6 bg-slate-900 hover:bg-slate-700 text-white font-bold rounded-xl shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {pwSaving ? <><Loader className="animate-spin w-4 h-4" /> Updating...</> : <><KeyRound className="w-4 h-4" /> Update Password</>}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0 text-white shadow-sm">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-extrabold text-slate-900">Forgot Password</h3>
+                    <p className="text-xs text-slate-500 font-medium">Verify via OTP sent to your registered email to set a new password.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleForgot(false)}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-500 px-3 py-1.5 rounded-lg transition"
+                >
+                  Back to Change Password
+                </button>
+              </div>
+
+              {forgotStep === 1 ? (
+                <div className="max-w-lg space-y-4">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-cyan-100 flex items-center justify-center text-cyan-700 flex-shrink-0">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Registered Email</p>
+                      <p className="text-sm font-bold text-slate-800 truncate">{profile.email}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600">
+                    We will send a 6-digit verification OTP code to your official email above.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={forgotLoading}
+                    className="flex items-center gap-2 py-2.5 px-6 bg-slate-900 hover:bg-slate-700 text-white font-bold rounded-xl shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {forgotLoading ? (
+                      <><Loader className="animate-spin w-4 h-4" /> Sending OTP...</>
+                    ) : (
+                      <><Send className="w-4 h-4" /> Send Verification OTP</>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleResetWithOtp} className="space-y-4 max-w-lg">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-medium text-emerald-800">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span>OTP sent to <span className="font-bold">{profile.email}</span></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={resendCooldown > 0 || forgotLoading}
+                      className="text-xs font-bold text-emerald-700 hover:text-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed ml-2 flex-shrink-0"
+                    >
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend OTP"}
+                    </button>
+                  </div>
+
+                  {/* OTP Input */}
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">6-Digit OTP</label>
+                    <div className="relative mt-1.5">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={forgotOtp}
+                        onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
+                        required
+                        className="w-full pl-4 pr-4 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-bold tracking-widest"
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">Check your SRM email inbox for the 6-digit verification code.</p>
+                  </div>
+
+                  {/* New Password */}
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">New Password</label>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={showForgotNew ? "text" : "password"}
+                        placeholder="Min. 6 characters"
+                        value={forgotNewPass}
+                        onChange={(e) => setForgotNewPass(e.target.value)}
+                        minLength={6}
+                        required
+                        className="w-full pl-4 pr-11 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition text-sm font-medium"
+                      />
+                      <button type="button" onClick={() => setShowForgotNew(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1">
+                        {showForgotNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Confirm New Password</label>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={showForgotConfirm ? "text" : "password"}
+                        placeholder="Re-enter new password"
+                        value={forgotConfirmPass}
+                        onChange={(e) => setForgotConfirmPass(e.target.value)}
+                        minLength={6}
+                        required
+                        className={`w-full pl-4 pr-11 py-2.5 text-slate-900 bg-slate-50 border-2 rounded-xl focus:outline-none transition text-sm font-medium ${
+                          forgotMismatch ? "border-red-400 focus:border-red-500" :
+                          forgotMatch ? "border-emerald-400 focus:border-emerald-500" :
+                          "border-slate-300 focus:border-black"
+                        }`}
+                      />
+                      <button type="button" onClick={() => setShowForgotConfirm(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1">
+                        {showForgotConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {forgotMismatch && <p className="mt-1.5 text-[11px] font-bold text-red-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Passwords do not match</p>}
+                    {forgotMatch && <p className="mt-1.5 text-[11px] font-bold text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Passwords match</p>}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="submit"
+                      disabled={forgotLoading || forgotMismatch || forgotOtp.length !== 6 || !forgotNewPass || !forgotConfirmPass}
+                      className="flex items-center gap-2 py-2.5 px-6 bg-slate-900 hover:bg-slate-700 text-white font-bold rounded-xl shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      {forgotLoading ? <><Loader className="animate-spin w-4 h-4" /> Resetting...</> : <><KeyRound className="w-4 h-4" /> Reset Password</>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleForgot(false)}
+                      className="py-2.5 px-4 text-slate-600 hover:text-slate-900 font-semibold text-sm transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
         </section>
       </div>
     </div>

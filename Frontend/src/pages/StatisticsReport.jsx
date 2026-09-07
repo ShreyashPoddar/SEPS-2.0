@@ -8,7 +8,8 @@ import { Navigate } from "react-router-dom";
 const ALLOWED_EMAILS = [
   "sangeetm@srmist.edu.in",
   "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in"
+  "elavelvg@srmist.edu.in",
+  "hodece@srmist.edu.in"
 ];
 
 

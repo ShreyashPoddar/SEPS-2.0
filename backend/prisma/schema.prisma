@@ -1,10 +1,3 @@
-// Prisma schema for TiDB (MySQL wire-protocol compatible).
-// Replaces the old Mongoose/MongoDB models. Embedded arrays from Mongo
-// (StudentProjectApply.members, TeamApproved.members) are normalized into
-// their own join tables since TiDB is relational, not document-based.
-// Ticket's small embedded objects (targetMember, requestedChanges, timeline)
-// are kept as Json columns since they're not queried relationally anywhere.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,6 +5,238 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String              @id @default(cuid())
+  fullName               String
+  email                  String?             @unique
+  regNo                  String?             @unique
+  password               String?
+  role                   Role
+  department             String              @default("Dept of ECE")
+  internshipStatus       CohortTrack         @default(regular)
+  internshipCompany      String              @default("")
+  internshipDuration     String              @default("")
+  internships            Json
+  linkedinUrl            String              @default("")
+  githubUrl              String              @default("")
+  skills                 Json
+  cgpa                   Float?
+  resumeUrl              String              @default("")
+  profilePic             String              @default("")
+  experience             String?
+  description            String?             @db.Text
+  researchPast           String?             @db.Text
+  isVerified             Boolean             @default(true)
+  isProfileComplete      Boolean             @default(false)
+  verificationToken      String?
+  tokenExpires           DateTime?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  applicationMemberships ApplicationMember[]
+  notifications          Notification[]
+  projects               Project[]
+  teamMemberships        TeamMember[]
+  tickets                Ticket[]
+  ticketsAsProjectIncharge Ticket[]            @relation("TicketProjectIncharge")
+  ticketsAsFacultyAdvisor  Ticket[]            @relation("TicketFacultyAdvisor")
+  ticketsAsHOD             Ticket[]            @relation("TicketHOD")
+
+  // ── RDBMS Academic Allocations ─────────────────────────────────────────────
+  sectionId              String?
+  sectionName            String?
+  section                Section?            @relation("SectionStudents", fields: [sectionId], references: [id], onDelete: SetNull)
+  facultyAdvisorId       String?
+  facultyAdvisor         User?               @relation("StudentFacultyAdvisor", fields: [facultyAdvisorId], references: [id], onDelete: SetNull)
+  advisedStudents        User[]              @relation("StudentFacultyAdvisor")
+  advisedSections        Section[]           @relation("SectionFacultyAdvisor")
+  departmentId           String?
+  departmentRel          Department?         @relation("StudentDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyDepartmentId    String?
+  facultyDepartment      Department?         @relation("FacultyDepartment", fields: [facultyDepartmentId], references: [id], onDelete: SetNull)
+  headedDepartments      Department[]        @relation("DepartmentHOD")
+
+  @@index([sectionId])
+  @@index([facultyAdvisorId])
+  @@index([departmentId])
+  @@index([facultyDepartmentId])
+}
+
+model Project {
+  id            String                @id @default(cuid())
+  teacherId     String
+  facultyName   String
+  projectTitle  String
+  description   String                @db.Text
+  stream        String
+  domain        String
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  teacher       User                  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  applications  StudentProjectApply[]
+  approvedTeams TeamApproved[]
+
+  @@index([teacherId])
+}
+
+model StudentProjectApply {
+  id              String              @id @default(cuid())
+  projectId       String
+  applicationType ApplicationType
+  cohortTrack     CohortTrack         @default(regular)
+  hasCrossBranch  Boolean             @default(false)
+  status          ApplicationStatus   @default(pending_faculty_approval)
+  priority        Int
+  appliedAt       DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  members         ApplicationMember[]
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tickets         Ticket[]
+
+  @@index([projectId])
+}
+
+model ApplicationMember {
+  id                String              @id @default(cuid())
+  applicationId     String
+  studentId         String
+  name              String
+  regNo             String
+  department        String              @default("Dept of ECE")
+  internshipStatus  CohortTrack         @default(regular)
+  status            MemberStatus        @default(pending)
+  verificationToken String?
+  createdAt         DateTime            @default(now())
+  application       StudentProjectApply @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  student           User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([studentId])
+}
+
+model TeamApproved {
+  id              String          @id @default(cuid())
+  projectId       String
+  applicationType ApplicationType
+  approvedAt      DateTime        @default(now())
+  facultyName     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members         TeamMember[]
+  tickets         Ticket[]
+
+  @@index([projectId])
+}
+
+model TeamMember {
+  id        String       @id @default(cuid())
+  teamId    String
+  studentId String
+  name      String
+  regNo     String
+  createdAt DateTime     @default(now())
+  student   User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  team      TeamApproved @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([studentId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String           @db.Text
+  type      NotificationType @default(info)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model GlobalDeadline {
+  id       String   @id @default(cuid())
+  deadline DateTime
+}
+
+model Ticket {
+  id                 String               @id @default(cuid())
+  ticketId           String               @unique
+  applicationId      String?
+  studentId          String
+  projectTitle       String               @default("")
+  facultyName        String               @default("")
+  targetMember       Json
+  changeType         TicketChangeType
+  requestedChanges   Json?
+  reason             String               @db.Text
+  status             TicketStatus         @default(pending)
+  progressStep       Int                  @default(1)
+  coordinatorRemarks String               @default("")
+  timeline           Json
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  teamId             String?
+  hasInternship           Boolean              @default(false)
+  requiresHodApproval     Boolean              @default(false)
+  projectInchargeId       String?
+  projectInchargeApproval String               @default("pending")
+  facultyAdvisorId        String?
+  facultyAdvisorApproval  String               @default("pending")
+  hodId                   String?
+  hodApproval             String               @default("not_required")
+
+  application        StudentProjectApply? @relation(fields: [applicationId], references: [id])
+  student            User                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  team               TeamApproved?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  projectIncharge    User?                @relation("TicketProjectIncharge", fields: [projectInchargeId], references: [id], onDelete: SetNull)
+  facultyAdvisor     User?                @relation("TicketFacultyAdvisor", fields: [facultyAdvisorId], references: [id], onDelete: SetNull)
+  hod                User?                @relation("TicketHOD", fields: [hodId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+  @@index([teamId])
+  @@index([studentId])
+  @@index([projectInchargeId])
+  @@index([facultyAdvisorId])
+  @@index([hodId])
+}
+
+model Department {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  code      String    @default("ECE")
+  hodId     String?
+  hod       User?     @relation("DepartmentHOD", fields: [hodId], references: [id], onDelete: SetNull)
+  sections  Section[]
+  students  User[]    @relation("StudentDepartment")
+  faculty   User[]    @relation("FacultyDepartment")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([hodId])
+}
+
+model Section {
+  id               String      @id @default(cuid())
+  name             String
+  departmentId     String?
+  department       Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyAdvisorId String?
+  facultyAdvisor   User?       @relation("SectionFacultyAdvisor", fields: [facultyAdvisorId], references: [id], onDelete: SetNull)
+  students         User[]      @relation("SectionStudents")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([name, departmentId])
+  @@index([departmentId])
+  @@index([facultyAdvisorId])
 }
 
 enum Role {
@@ -52,6 +277,7 @@ enum TicketChangeType {
   name_correction
   replacement
   withdrawal
+  cancellation
 }
 
 enum TicketStatus {
@@ -59,179 +285,4 @@ enum TicketStatus {
   in_review
   approved
   rejected
-}
-
-model User {
-  id                    String    @id @default(cuid())
-  fullName              String
-  email                 String    @unique
-  regNo                 String?   @unique
-  password              String
-  role                  Role
-  department            String    @default("Dept of ECE")
-  internshipStatus      CohortTrack @default(regular)
-  internshipCompany     String    @default("")
-  internshipDuration    String    @default("")
-  internships           Json      @default("[]")
-  linkedinUrl           String    @default("")
-  githubUrl             String    @default("")
-  skills                Json      @default("[]")
-  cgpa                  Float?
-  resumeUrl             String    @default("")
-  profilePic            String    @default("")
-  experience            String?
-  description           String?   @db.Text
-  researchPast          String?   @db.Text
-  isVerified            Boolean   @default(true)
-  verificationToken     String?
-  tokenExpires          DateTime?
-  resetPasswordToken    String?
-  resetPasswordExpires  DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  projects              Project[]
-  applicationMemberships ApplicationMember[]
-  teamMemberships       TeamMember[]
-  notifications         Notification[]
-  tickets               Ticket[]
-}
-
-model Project {
-  id             String   @id @default(cuid())
-  teacherId      String
-  teacher        User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  facultyName    String
-  projectTitle   String
-  description    String   @db.Text
-  stream         String
-  domain         String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  applications   StudentProjectApply[]
-  approvedTeams  TeamApproved[]
-
-  @@index([teacherId])
-}
-
-model StudentProjectApply {
-  id              String            @id @default(cuid())
-  projectId       String
-  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  applicationType ApplicationType
-  cohortTrack     CohortTrack       @default(regular)
-  hasCrossBranch  Boolean           @default(false)
-  status          ApplicationStatus @default(pending_faculty_approval)
-  priority        Int
-  appliedAt       DateTime          @default(now())
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  members         ApplicationMember[]
-  tickets         Ticket[]
-
-  @@index([projectId])
-}
-
-model ApplicationMember {
-  id                String               @id @default(cuid())
-  applicationId     String
-  application       StudentProjectApply  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  studentId         String
-  student           User                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  name              String
-  regNo             String
-  department        String               @default("Dept of ECE")
-  internshipStatus  CohortTrack          @default(regular)
-  status            MemberStatus         @default(pending)
-  verificationToken String?
-  createdAt         DateTime             @default(now())
-
-  @@index([applicationId])
-  @@index([studentId])
-}
-
-model TeamApproved {
-  id              String          @id @default(cuid())
-  projectId       String
-  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  applicationType ApplicationType
-  approvedAt      DateTime        @default(now())
-  facultyName     String
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  members         TeamMember[]
-  tickets         Ticket[]
-
-  @@index([projectId])
-}
-
-model TeamMember {
-  id        String       @id @default(cuid())
-  teamId    String
-  team      TeamApproved @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  studentId String
-  student   User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  name      String
-  regNo     String
-  createdAt DateTime     @default(now())
-
-  @@index([teamId])
-  @@index([studentId])
-}
-
-model Notification {
-  id        String            @id @default(cuid())
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  message   String            @db.Text
-  type      NotificationType  @default(info)
-  isRead    Boolean           @default(false)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-
-  @@index([userId])
-}
-
-model GlobalDeadline {
-  id       String   @id @default(cuid())
-  deadline DateTime
-}
-
-model Ticket {
-  id                 String              @id @default(cuid())
-  ticketId           String              @unique
-  // A ticket is raised against a pending application, and is re-pointed at the
-  // approved team when faculty approve it. Approval deletes the application, so
-  // `applicationId` is nullable with SetNull rather than Cascade — otherwise the
-  // ticket history was destroyed at exactly the moment a roster change matters.
-  // Exactly one of applicationId / teamId is set at any time.
-  applicationId      String?
-  application        StudentProjectApply? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  teamId             String?
-  team               TeamApproved?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  studentId          String
-  student             User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  projectTitle       String              @default("")
-  facultyName        String              @default("")
-  // { studentId, name, regNo, department }
-  targetMember       Json
-  changeType         TicketChangeType
-  // { correctedName?, correctedRegNo?, replacementStudent? }
-  requestedChanges   Json?
-  reason             String              @db.Text
-  status             TicketStatus        @default(pending)
-  progressStep       Int                 @default(1)
-  coordinatorRemarks String              @default("")
-  // [{ step, date, message }]
-  timeline           Json                @default("[]")
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-
-  @@index([applicationId])
-  @@index([teamId])
-  @@index([studentId])
 }

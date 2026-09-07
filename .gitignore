@@ -1,2 +1,45 @@
+# ─── Environment / Secrets ──────────────────────────────────────
 .env
-node_modules
+.env.*
+!.env.example
+.neon
+.env.local
+
+# ─── Dependencies ────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build outputs ───────────────────────────────────────────────
+dist/
+build/
+.vite/
+
+# ─── Prisma generated ────────────────────────────────────────────
+backend/prisma/generated/
+
+# ─── Sensitive data files (Excel/CSV with student & faculty PII) ─
+*.xlsx
+*.xls
+*.csv
+backend/faculty*
+backend/*faculty*
+backend/*IV year*
+
+# ─── Test / seed scripts (not for production) ────────────────────
+backend/test_*.js
+backend/seed_*.js
+backend/reset_*.js
+backend/sync_*.js
+
+# ─── Neon / deployment artifacts ─────────────────────────────────
+skills-lock.json
+.agents/
+
+# ─── OS & editor junk ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+*.swp

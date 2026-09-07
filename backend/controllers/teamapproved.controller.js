@@ -63,6 +63,36 @@ export const approveApplication = async (req, res) => {
       return res.status(denied.status).json({ message: denied.message });
     }
 
+    // REQUIREMENT: If this is a Priority 2 application, verify that NO member has an active Priority 1 project
+    if (application.priority === 2) {
+      const studentIds = application.members.map((m) => m.studentId);
+      const activeP1 = await prisma.studentProjectApply.findFirst({
+        where: {
+          id: { not: applicationId },
+          priority: 1,
+          status: { in: ["pending_member_approval", "pending_faculty_approval"] },
+          members: { some: { studentId: { in: studentIds } } },
+        },
+        include: {
+          project: { select: { projectTitle: true } },
+          members: true,
+        },
+      });
+
+      if (activeP1) {
+        const conflictMember = activeP1.members.find((m) => studentIds.includes(m.studentId));
+        return res.status(400).json({
+          message: `Cannot approve Priority 2 application: Team member ${conflictMember?.name || "student"} (${conflictMember?.regNo || "N/A"}) still has an active Priority 1 application for "${activeP1.project?.projectTitle || "Priority 1 Project"}". The student must manually close/cancel their Priority 1 application before this Priority 2 application can be approved.`,
+          blockingMember: {
+            name: conflictMember?.name,
+            regNo: conflictMember?.regNo,
+            p1ProjectTitle: activeP1.project?.projectTitle,
+            p1ApplicationId: activeP1.id,
+          },
+        });
+      }
+    }
+
     const approvedTeam = await prisma.teamApproved.create({
       data: {
         projectId: application.project.id,

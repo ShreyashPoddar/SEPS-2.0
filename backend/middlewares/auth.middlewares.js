@@ -4,7 +4,11 @@ import prisma from "../lib/db.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
-    const token = req.cookies.jwt;
+    const token =
+      req.cookies?.jwt ||
+      (req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.split(" ")[1]
+        : null);
     if (!token) {
       return res.status(401).json({ message: "Unauthorized - No Token Provided" });
     }
@@ -14,7 +18,36 @@ export const protectRoute = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized - Invalid Token" });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: {
+        section: true,
+        facultyAdvisor: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            description: true,
+            profilePic: true,
+            department: true,
+          },
+        },
+        departmentRel: {
+          include: {
+            hod: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                description: true,
+                profilePic: true,
+                department: true,
+              },
+            },
+          },
+        },
+      },
+    });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }

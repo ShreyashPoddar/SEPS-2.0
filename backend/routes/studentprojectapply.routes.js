@@ -30,6 +30,7 @@ import {
   raiseTicket,
   getStudentTickets,
   cancelTicket,
+  cancelApplication,
 } from "../controllers/studentprojectapply.controller.js";
 import { protectRoute } from "../middlewares/auth.middlewares.js";
 
@@ -41,6 +42,9 @@ router.post("/apply", protectRoute, applyToProject);
 
 // A logged-in student gets all their submitted applications
 router.get("/my-applications", protectRoute, getMyApplications);
+
+// A logged-in student manually cancels/closes a pending application
+router.delete("/applications/:applicationId", protectRoute, cancelApplication);
 
 // A logged-in student gets their pending group invitations
 router.get("/invitations", protectRoute, getPendingInvitations);

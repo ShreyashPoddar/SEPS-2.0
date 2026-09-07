@@ -20,7 +20,7 @@ import {
   Sparkles,
   ExternalLink
 } from "lucide-react";
-import { getMyApplications, getStudentTickets, cancelTicket } from "../api";
+import { getMyApplications, getStudentTickets, cancelTicket, cancelPendingApplication } from "../api";
 import ChangeTicketModal from "./ChangeTicketModal";
 
 export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
@@ -31,6 +31,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
 
   // Modal for raising a change ticket on an application
   const [selectedAppForTicket, setSelectedAppForTicket] = useState(null);
+  const [ticketInitialType, setTicketInitialType] = useState("name_correction");
 
   const fetchData = async () => {
     setLoading(true);
@@ -51,6 +52,30 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleCancelApplication = async (app) => {
+    if (app.status === "approved") {
+      setTicketInitialType("cancellation");
+      setSelectedAppForTicket(app);
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Are you sure you want to cancel/close your Priority ${app.priority || 1} application for "${app.projectTitle}"? This will free your quota immediately.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await cancelPendingApplication(app._id);
+      toast.success(`Priority ${app.priority || 1} application closed successfully.`);
+      setApplications((prev) => prev.filter((a) => a._id !== app._id));
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to cancel application.");
+    }
+  };
 
   const handleCancelTicket = async (ticketId) => {
     if (!window.confirm("Are you sure you want to cancel this ticket request?")) return;
@@ -167,10 +192,20 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                                   isApproved
                                     ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                    : app.status === "pending_member_approval"
+                                    ? "bg-purple-100 text-purple-900 border border-purple-300"
+                                    : app.status === "rejected"
+                                    ? "bg-red-100 text-red-800 border border-red-300"
                                     : "bg-amber-100 text-amber-900 border border-amber-300"
                                 }`}
                               >
-                                {isApproved ? "Approved & Allocated" : "Pending Faculty Approval"}
+                                {isApproved
+                                  ? "Approved & Allocated"
+                                  : app.status === "pending_member_approval"
+                                  ? "⏳ Teammate Confirmations Pending"
+                                  : app.status === "rejected"
+                                  ? "Declined"
+                                  : "Pending Faculty Approval"}
                               </span>
                               {app.hasCrossBranch && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
@@ -187,22 +222,40 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                             </p>
                           </div>
 
-                          {/* 🎫 RAISE TICKET ACTION BUTTON */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedAppForTicket(app)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white text-xs font-extrabold border-2 border-black shadow transition self-start sm:self-auto hover:scale-105 active:scale-95"
-                          >
-                            <Ticket className="w-4 h-4 text-amber-400" />
-                            <span>🎫 Raise Member Change Ticket</span>
-                          </button>
+                          {/* ACTION BUTTONS */}
+                          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTicketInitialType("name_correction");
+                                setSelectedAppForTicket(app);
+                              }}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white text-xs font-extrabold border-2 border-black shadow transition active:scale-95"
+                            >
+                              <Ticket className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Request Team Change</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelApplication(app)}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-red-50 hover:bg-red-100 text-red-700 text-xs font-extrabold border-2 border-red-300 transition active:scale-95"
+                              title={
+                                isApproved
+                                  ? "Request official project cancellation ticket"
+                                  : "Manually close and cancel this pending application"
+                              }
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>{isApproved ? "Request Cancellation" : "Close / Cancel Application"}</span>
+                            </button>
+                          </div>
                         </div>
 
                         {/* Current Team Roster */}
                         <div>
                           <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
                             <Users className="w-4 h-4" />
-                            <span>Current Registered Roster (3 Members)</span>
+                            <span>Current Registered Roster ({members.length} Members)</span>
                           </h4>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -216,9 +269,20 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                     <span className="text-[10px] font-extrabold uppercase text-slate-500">
                                       {idx === 0 ? "Leader" : `Teammate ${idx + 1}`}
                                     </span>
-                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
-                                      {m.department || "Dept of ECE"}
-                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
+                                        {m.department || "Dept of ECE"}
+                                      </span>
+                                      {m.status === "accepted" ? (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
+                                          ✓ Confirmed
+                                        </span>
+                                      ) : m.status === "pending" ? (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded">
+                                          ⏳ Pending
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   </div>
                                   <p className="font-bold text-xs text-slate-950">{m.name}</p>
                                   <p className="text-[11px] font-mono font-medium text-slate-500">
@@ -280,6 +344,8 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                   ? "Name / RegNo Fix"
                                   : tck.changeType === "replacement"
                                   ? "Teammate Swap"
+                                  : tck.changeType === "cancellation"
+                                  ? "Project Cancellation"
                                   : "Withdrawal"}
                               </span>
                               <span
@@ -292,10 +358,10 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                 }`}
                               >
                                 {isApproved
-                                  ? "Approved & Updated"
+                                  ? tck.changeType === "cancellation" ? "Cancelled & Approved" : "Approved & Updated"
                                   : isRejected
                                   ? "Rejected"
-                                  : "Under Coordinator Review"}
+                                  : "Under Review"}
                               </span>
                             </div>
                             <h3 className="text-base font-extrabold text-slate-950">
@@ -317,19 +383,35 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                           )}
                         </div>
 
-                        {/* 4-Stage Visual Progress Timeline */}
+                        {/* Visual Progress Timeline */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
                           <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-3">
                             Verification Workflow Timeline
                           </h4>
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {[
-                              { s: 1, title: "1. Ticket Submitted", desc: "Logged in system" },
-                              { s: 2, title: "2. Faculty Review", desc: "Guide evaluation" },
-                              { s: 3, title: "3. HoD Approval", desc: "Department sign-off" },
-                              { s: 4, title: "4. Roster Updated", desc: "Locked into ERP" },
-                            ].map((stage) => {
+                            {(tck.changeType === "cancellation"
+                              ? [
+                                  { s: 1, title: "1. Ticket Submitted", desc: "Logged in system" },
+                                  {
+                                    s: 2,
+                                    title: "2. Guide & Advisor",
+                                    desc: "Dual review required",
+                                  },
+                                  {
+                                    s: 3,
+                                    title: tck.requiresHodApproval ? "3. HoD Approval" : "3. HoD Bypass",
+                                    desc: tck.requiresHodApproval ? "Department sign-off" : "Not needed (no internship)",
+                                  },
+                                  { s: 4, title: "4. Project Cancelled", desc: "Exit finalized" },
+                                ]
+                              : [
+                                  { s: 1, title: "1. Ticket Submitted", desc: "Logged in system" },
+                                  { s: 2, title: "2. Faculty Review", desc: "Guide evaluation" },
+                                  { s: 3, title: "3. HoD Approval", desc: "Department sign-off" },
+                                  { s: 4, title: "4. Roster Updated", desc: "Locked into ERP" },
+                                ]
+                            ).map((stage) => {
                               const isCompleted = step >= stage.s;
                               const isCurrent = step === stage.s && isPending;
 
@@ -359,6 +441,55 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                               );
                             })}
                           </div>
+
+                          {/* Stakeholder Approval Badges for Cancellation */}
+                          {tck.changeType === "cancellation" && (
+                            <div className="mt-3 pt-3 border-t border-slate-200 flex flex-wrap gap-2 text-[11px]">
+                              <span className="font-bold text-slate-600 self-center">Approvals:</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold border ${
+                                  tck.projectInchargeApproval === "approved"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                    : tck.projectInchargeApproval === "rejected"
+                                    ? "bg-red-50 text-red-800 border-red-300"
+                                    : "bg-amber-50 text-amber-800 border-amber-300"
+                                }`}
+                              >
+                                Project Incharge: {tck.projectInchargeApproval || "pending"}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold border ${
+                                  tck.facultyAdvisorApproval === "approved"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                    : tck.facultyAdvisorApproval === "rejected"
+                                    ? "bg-red-50 text-red-800 border-red-300"
+                                    : "bg-amber-50 text-amber-800 border-amber-300"
+                                }`}
+                              >
+                                Faculty Advisor: {tck.facultyAdvisorApproval || "pending"}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold border ${
+                                  !tck.requiresHodApproval
+                                    ? "bg-slate-100 text-slate-600 border-slate-300"
+                                    : tck.hodApproval === "approved"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                    : tck.hodApproval === "rejected"
+                                    ? "bg-red-50 text-red-800 border-red-300"
+                                    : tck.hodApproval === "pending"
+                                    ? "bg-blue-50 text-blue-800 border-blue-300"
+                                    : "bg-slate-100 text-slate-600 border-slate-300"
+                                }`}
+                              >
+                                Department HOD:{" "}
+                                {!tck.requiresHodApproval
+                                  ? "Not Required (No Internship)"
+                                  : tck.hodApproval === "pending_prior_approvals"
+                                  ? "Pending Prior Approvals"
+                                  : tck.hodApproval || "pending"}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Ticket details / remarks */}
@@ -389,6 +520,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
           currentUser={currentUser}
           onClose={() => setSelectedAppForTicket(null)}
           onTicketSubmitted={handleTicketSubmitted}
+          initialTicketType={ticketInitialType}
         />
       )}
     </div>

@@ -1,8 +1,12 @@
 // controllers/projectupload.controller.js
 import prisma from "../lib/db.js";
+import { parseStreams, isStudentEligibleForStream } from "../lib/streamMatcher.js";
 
 const withId = (obj) => {
-  if (obj) obj._id = obj.id;
+  if (obj) {
+    obj._id = obj.id;
+    obj.allowedStreams = parseStreams(obj.stream);
+  }
   return obj;
 };
 
@@ -63,7 +67,16 @@ const getAllProjects = async (req, res) => {
     });
     projects.forEach(withId);
 
-    res.status(200).json(projects);
+    // Filter projects based on student's department/stream eligibility
+    // e.g. "CSE, ECE" allows both CSE and ECE students. "CSE" shows only to CSE students.
+    let eligibleProjects = projects;
+    if (req.user && req.user.role === "student") {
+      eligibleProjects = projects.filter((p) =>
+        isStudentEligibleForStream(req.user, p.stream)
+      );
+    }
+
+    res.status(200).json(eligibleProjects);
   } catch (error) {
     console.error("Error in getAllProjects:", error.message);
     res.status(500).json({ message: "Error fetching projects", error: error.message });
@@ -73,10 +86,24 @@ const getAllProjects = async (req, res) => {
 const getProjectsByTeacher = async (req, res) => {
   try {
     const projects = await prisma.project.findMany({
-      where: { teacherId: req.user._id },
+      where: {
+        OR: [
+          { teacherId: req.user._id },
+          { teacherId: req.user.id },
+          { facultyName: req.user.fullName },
+        ],
+      },
+      include: {
+        applications: {
+          select: { id: true, status: true, priority: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
-    projects.forEach(withId);
+    projects.forEach((p) => {
+      withId(p);
+      p.applicationsCount = p.applications ? p.applications.length : 0;
+    });
     res.status(200).json(projects);
   } catch (error) {
     console.error("Error in getProjectsByTeacher:", error.message);

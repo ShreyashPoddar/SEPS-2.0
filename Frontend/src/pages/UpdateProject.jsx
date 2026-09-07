@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAllProjects, updateProject } from "../api";
+import { parseStreams } from "../utils/streamUtils";
 
 export default function UpdateProject() {
   const { projectId } = useParams();
@@ -49,114 +50,144 @@ export default function UpdateProject() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
-      <div className="max-w-lg mx-auto bg-slate-800 p-6 rounded-lg shadow-lg">
-        <h1 className="text-2xl font-bold mb-4">Update Project</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen bg-slate-100 text-slate-900 p-4 sm:p-6 lg:p-8 pb-16">
+      <div className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-black text-slate-950">Update Capstone Project</h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Modify project details, domain tags, and eligible streams</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/teacher-dashboard")}
+            className="px-4 py-2 rounded-full border-2 border-slate-900 text-xs font-extrabold text-slate-800 hover:bg-slate-50 transition"
+          >
+            ← Back
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Faculty Name */}
-          <input
-            type="text"
-            name="facultyName"
-            value={projectData.facultyName}
-            onChange={handleChange}
-            placeholder="Faculty Name"
-            className="w-full px-4 py-2 rounded bg-slate-700 border border-slate-600"
-            required
-          />
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
+              Faculty Guide
+            </label>
+            <input
+              type="text"
+              name="facultyName"
+              value={projectData.facultyName}
+              onChange={handleChange}
+              placeholder="Faculty Guide Name"
+              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
+              required
+            />
+          </div>
 
           {/* Project Title */}
-          <input
-            type="text"
-            name="projectTitle"
-            value={projectData.projectTitle}
-            onChange={handleChange}
-            placeholder="Project Title"
-            className="w-full px-4 py-2 rounded bg-slate-700 border border-slate-600"
-            required
-          />
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
+              Project Title
+            </label>
+            <input
+              type="text"
+              name="projectTitle"
+              value={projectData.projectTitle}
+              onChange={handleChange}
+              placeholder="Project Title"
+              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
+              required
+            />
+          </div>
 
           {/* Description */}
-          <textarea
-            name="description"
-            value={projectData.description}
-            onChange={handleChange}
-            placeholder="Description"
-            className="w-full px-4 py-2 rounded bg-slate-700 border border-slate-600"
-            rows="4"
-            required
-          />
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
+              Description & Scope
+            </label>
+            <textarea
+              name="description"
+              value={projectData.description}
+              onChange={handleChange}
+              placeholder="Description"
+              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
+              rows={4}
+              required
+            />
+          </div>
 
           {/* Stream */}
-          <input
-            type="text"
-            name="stream"
-            value={projectData.stream}
-            onChange={handleChange}
-            placeholder="Stream"
-            className="w-full px-4 py-2 rounded bg-slate-700 border border-slate-600"
-            required
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                Eligible Stream(s)
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Comma-separated (e.g. CSE, ECE)
+              </span>
+            </div>
+            <input
+              type="text"
+              name="stream"
+              value={projectData.stream}
+              onChange={handleChange}
+              placeholder="e.g., ECE, CSE or Open to All"
+              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
+              required
+            />
+            {projectData.stream && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[11px] text-slate-500 font-bold">
+                  Eligible streams:
+                </span>
+                {parseStreams(projectData.stream).map((str, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200"
+                  >
+                    {str}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Domain */}
-          <select
-            name="domain"
-            value={projectData.domain}
-            onChange={handleChange}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
-            required
-          >
-            <option value="">Select Domain</option>
-            <option>Analog Circuits</option>
-            <option>Digital Circuits</option>
-            <option>Semiconductor Devices</option>
-            <option>Wireless & Mobile Communication</option>
-            <option>Fiber-Optic Communication</option>
-            <option>Computer Networks</option>
-            <option>Digital Signal Processing (DSP)</option>
-            <option>Image & Video Processing</option>
-            <option>Embedded Systems</option>
-            <option>Internet of Things (IoT)</option>
-            <option>Electromagnetics & RF Engineering</option>
-            <option>Antennas & Wave Propagation</option>
-            <option>VLSI (Very Large Scale Integration)</option>
-            <option>Control Systems</option>
-            <option>Robotics and Automation</option>
-            <option>Power Electronics</option>
-            <option>Computer Architecture</option>
-            <option>Photonics and Optoelectronics</option>
-            <option>Information Theory</option>
-            <option>Biomedical Engineering</option>
-            <option>Quantum Computing</option>
-            <option>MEMS (Micro-Electro-Mechanical Systems)</option>
-            <option>Machine Learning & AI Hardware</option>
-            <option>Signal Integrity and High-Speed Design</option>
-            <option>Nanoelectronics</option>
-            <option>Terahertz Technology</option>
-            <option>Mixed Signal Design</option>
-            <option>Automotive Electronics</option>
-            <option>Sensor Networks</option>
-            <option>Radar Systems</option>
-            <option>Satellite Communication</option>
-            <option>Cyber-Physical Systems</option>
-            <option>Augmented & Virtual Reality Hardware</option>
-          </select>
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
+              Technical Domain
+            </label>
+            <select
+              name="domain"
+              value={projectData.domain}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black transition"
+              required
+            >
+              <option value="">Select Domain</option>
+              <option>Antenna design and RF systems</option>
+              <option>AI/ML/DL based applications</option>
+              <option>Automation and Robotics</option>
+              <option>Audio, Speech signal Processing</option>
+              <option>Biomedical Electronics</option>
+              <option>Embedded Systems and IoT</option>
+              <option>Image and Video Processing</option>
+              <option>Multi disciplinary</option>
+              <option>Optical Communication</option>
+              <option>Semiconductor material & Devices</option>
+              <option>VLSI Design</option>
+              <option>Wireless Communication</option>
+            </select>
+          </div>
 
-          {/* Application Deadline */}
-            {/* Application Deadline (Global) */}
-            <div>
-              <label className="text-sm font-medium text-gray-600">Application Deadline</label>
-              <div className="w-full mt-1 px-4 py-2 text-gray-700 bg-slate-50 border border-slate-300 rounded-lg">
-                <span id="global-deadline"></span>
-              </div>
-            </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded"
-          >
-            {loading ? "Updating..." : "Update Project"}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-slate-950 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-full border-2 border-black shadow-md transition-all active:scale-98 disabled:opacity-50"
+            >
+              {loading ? "Saving Changes..." : "Save Project Changes"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

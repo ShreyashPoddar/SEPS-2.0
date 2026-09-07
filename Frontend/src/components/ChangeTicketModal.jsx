@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Send,
-  FileCheck
+  FileCheck,
+  XCircle,
 } from "lucide-react";
 import { searchStudents, raiseChangeTicket } from "../api";
 
@@ -34,6 +35,7 @@ export default function ChangeTicketModal({
   currentUser,
   onClose,
   onTicketSubmitted,
+  initialTicketType = "name_correction",
 }) {
   const members = application?.members || [];
   const cohortTrack = application?.cohortTrack || currentUser?.internshipStatus || "regular";
@@ -41,7 +43,7 @@ export default function ChangeTicketModal({
 
   // Form states
   const [selectedMember, setSelectedMember] = useState(members[1] || members[0] || null);
-  const [ticketType, setTicketType] = useState("name_correction"); // 'name_correction' | 'replacement' | 'withdrawal'
+  const [ticketType, setTicketType] = useState(initialTicketType || "name_correction");
   
   // Correction fields
   const [correctedName, setCorrectedName] = useState(selectedMember?.name || "");
@@ -107,7 +109,7 @@ export default function ChangeTicketModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!selectedMember) {
+    if (!selectedMember && ticketType !== "cancellation") {
       toast.error("Please select a target team member to modify.");
       return;
     }
@@ -143,11 +145,16 @@ export default function ChangeTicketModal({
         : { applicationId: application._id }),
       projectTitle: application.projectTitle || "Selected Project",
       facultyName: application.facultyName,
-      targetMember: {
+      targetMember: selectedMember ? {
         studentId: selectedMember.studentId,
         name: selectedMember.name,
         regNo: selectedMember.regNo,
         department: selectedMember.department || "Dept of ECE",
+      } : {
+        studentId: currentUser?.studentId || currentUser?._id,
+        name: currentUser?.fullName || currentUser?.name,
+        regNo: currentUser?.regNo,
+        department: currentUser?.department || "Dept of ECE",
       },
       changeType: ticketType,
       requestedChanges: {
@@ -209,47 +216,63 @@ export default function ChangeTicketModal({
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-7 space-y-6 max-h-[75vh] overflow-y-auto text-slate-900">
-          {/* 1. Target Member Selection */}
-          <div>
-            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-600 block mb-2">
-              1. Select Team Member to Modify
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {members.map((m, idx) => {
-                const isSelected = selectedMember?.regNo === m.regNo;
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedMember(m)}
-                    className={`p-3 rounded-2xl border-2 cursor-pointer transition flex flex-col justify-between ${
-                      isSelected
-                        ? "bg-slate-950 text-white border-black shadow-md"
-                        : "bg-slate-50 text-slate-900 border-slate-200 hover:border-slate-400"
-                    }`}
-                  >
-                    <div>
-                      <span className={`text-[10px] font-extrabold uppercase ${isSelected ? "text-cyan-300" : "text-slate-500"}`}>
-                        {idx === 0 ? "Leader" : `Member ${idx + 1}`}
-                      </span>
-                      <h4 className="font-bold text-xs truncate mt-0.5">
-                        {m.name}
-                      </h4>
-                      <p className={`text-[11px] font-mono ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
-                        {m.regNo}
-                      </p>
+          {/* 1. Target Member Selection (hidden for cancellation) */}
+          {ticketType !== "cancellation" ? (
+            <div>
+              <label className="text-xs font-extrabold uppercase tracking-wider text-slate-600 block mb-2">
+                1. Select Team Member to Modify
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {members.map((m, idx) => {
+                  const isSelected = selectedMember?.regNo === m.regNo;
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedMember(m)}
+                      className={`p-3 rounded-2xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-slate-950 text-white border-black shadow-md"
+                          : "bg-slate-50 text-slate-900 border-slate-200 hover:border-slate-400"
+                      }`}
+                    >
+                      <div>
+                        <span className={`text-[10px] font-extrabold uppercase ${isSelected ? "text-cyan-300" : "text-slate-500"}`}>
+                          {idx === 0 ? "Leader" : `Member ${idx + 1}`}
+                        </span>
+                        <h4 className="font-bold text-xs truncate mt-0.5">
+                          {m.name}
+                        </h4>
+                        <p className={`text-[11px] font-mono ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                          {m.regNo}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-red-600 text-white flex-shrink-0">
+                <XCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-red-950">
+                  Project Application Cancellation Request
+                </h4>
+                <p className="text-[11px] text-red-800 font-medium">
+                  This action requests full cancellation of the application for the entire project team ({members.length} members).
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 2. Change Category Tabs */}
           <div>
             <label className="text-xs font-extrabold uppercase tracking-wider text-slate-600 block mb-2">
               2. Select Request Category
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
                 type="button"
                 onClick={() => setTicketType("name_correction")}
@@ -260,7 +283,7 @@ export default function ChangeTicketModal({
                 }`}
               >
                 <Edit3 className="w-4 h-4" />
-                <span>Name / Reg No. Fix</span>
+                <span>Name Fix</span>
               </button>
 
               <button
@@ -273,9 +296,8 @@ export default function ChangeTicketModal({
                 }`}
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>Member Swap</span>
+                <span>Swap Member</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => setTicketType("withdrawal")}
@@ -286,7 +308,20 @@ export default function ChangeTicketModal({
                 }`}
               >
                 <UserMinus className="w-4 h-4" />
-                <span>Drop / Withdrawal</span>
+                <span>Drop Member</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTicketType("cancellation")}
+                className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition ${
+                  ticketType === "cancellation"
+                    ? "bg-red-600 text-white border-red-700 shadow"
+                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Cancel Project</span>
               </button>
             </div>
           </div>
@@ -323,8 +358,8 @@ export default function ChangeTicketModal({
                       type="text"
                       value={correctedRegNo}
                       onChange={(e) => setCorrectedRegNo(e.target.value)}
-                      placeholder="RA211100301..."
-                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black font-mono font-bold"
+                      placeholder="e.g. RA2311004010001"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black font-mono uppercase font-bold"
                       required
                     />
                   </div>
@@ -458,6 +493,39 @@ export default function ChangeTicketModal({
                   ⚠️ Member Withdrawal Notice
                 </p>
                 Requesting member removal will decrease your team size. The departmental coordinator may require you to replace this member before final project lock-in.
+              </div>
+            )}
+
+            {ticketType === "cancellation" && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-950 font-medium space-y-2.5 leading-relaxed">
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <p className="font-bold text-red-800 text-sm">
+                    Project Cancellation Request
+                  </p>
+                </div>
+                <p>
+                  This request will officially cancel your project allocation upon multi-stakeholder approval.
+                </p>
+                <div className="p-3 bg-white/90 rounded-xl border border-red-200 text-[11px] space-y-1.5 shadow-sm">
+                  <p className="font-bold text-slate-900 uppercase tracking-wider text-[10px]">
+                    Institutional Approval Pipeline:
+                  </p>
+                  <p className="text-slate-700">
+                    1️⃣ Request sent to <strong>Project Incharge</strong> &amp; your <strong>Faculty Advisor</strong>.
+                  </p>
+                  {currentUser?.internshipStatus === "internship" ||
+                  (Array.isArray(currentUser?.internships) && currentUser.internships.length > 0) ||
+                  Boolean(currentUser?.internshipCompany) ? (
+                    <p className="text-amber-900 font-semibold bg-amber-50 p-2 rounded-lg border border-amber-200">
+                      🏢 <strong>Corporate Internship Background:</strong> Once both your Project Incharge and Faculty Advisor approve, the request will be automatically forwarded to your <strong>Head of Department (HOD)</strong>. You will only leave the project upon HOD sign-off.
+                    </p>
+                  ) : (
+                    <p className="text-emerald-900 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                      🎓 <strong>Regular Track (No Internship):</strong> Once both your Project Incharge and Faculty Advisor approve, your project cancellation is complete. HOD approval is not required.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

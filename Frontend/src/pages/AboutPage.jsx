@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import SlicedWaves from "../components/SlicedWaves";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
+import { getCurrentUser } from "../api";
 import {
   Users,
   BookOpen,
@@ -14,6 +15,21 @@ import {
 } from "lucide-react";
 
 export default function AboutPage() {
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then((res) => {
+        if (res?.data?.role) {
+          setCurrentUser(res.data);
+        }
+      })
+      .catch(() => {
+        setCurrentUser(null);
+      });
+  }, []);
+
+  const dashboardPath = currentUser?.role === "teacher" ? "/teacher-dashboard" : "/student-dashboard";
   const features = [
     {
       icon: Users,
@@ -131,11 +147,6 @@ export default function AboutPage() {
                   About
                 </Link>
               </motion.div>
-              <motion.div whileHover={{ y: -1 }}>
-                <Link to="/signup" className="hover:text-black transition">
-                  Sign up
-                </Link>
-              </motion.div>
             </nav>
 
             <div className="flex items-center">
@@ -144,12 +155,21 @@ export default function AboutPage() {
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
-                <Link
-                  to="/login"
-                  className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-black hover:bg-slate-800 border-2 border-black rounded-full transition-colors shadow-md block"
-                >
-                  Log in
-                </Link>
+                {currentUser ? (
+                  <Link
+                    to={dashboardPath}
+                    className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 border-2 border-black rounded-full transition-colors shadow-md block"
+                  >
+                    Go to Dashboard →
+                  </Link>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-black hover:bg-slate-800 border-2 border-black rounded-full transition-colors shadow-md block"
+                  >
+                    Log in
+                  </Link>
+                )}
               </motion.div>
             </div>
           </div>
@@ -277,20 +297,22 @@ export default function AboutPage() {
           <div className="flex flex-row items-center justify-center gap-3 sm:gap-4 pt-2">
             <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
               <Link
-                to="/signup"
+                to={currentUser ? dashboardPath : "/login"}
                 className="px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold text-black bg-white hover:bg-slate-100 border-2 border-black shadow-lg transition block"
               >
-                Get started
+                {currentUser ? "Go to Dashboard →" : "Sign In to Portal"}
               </Link>
             </motion.div>
-            <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
-              <Link
-                to="/login"
-                className="px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 border-2 border-slate-700 transition block"
-              >
-                Sign in to account
-              </Link>
-            </motion.div>
+            {!currentUser && (
+              <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
+                <Link
+                  to="/login"
+                  className="px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 border-2 border-slate-700 transition block"
+                >
+                  Sign in to account
+                </Link>
+              </motion.div>
+            )}
           </div>
         </motion.div>
       </main>

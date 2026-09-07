@@ -7,7 +7,6 @@ import {
 import LandingPage from "./pages/LandingPage.jsx";
 import AboutPage from "./pages/AboutPage.jsx";
 import Login from "./pages/Login.jsx";
-import Signup from "./pages/Signup.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import StudentDashboard from "./pages/StudentDahboard.jsx";
 import TeacherDashboard from "./pages/TeacherDashboard.jsx";
@@ -41,7 +40,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/signup" element={<Navigate to="/login" replace />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
@@ -58,6 +57,10 @@ export default function App() {
           element={<TeacherApplications />}
         />
         <Route
+          path="/teacher/project-applications/:id"
+          element={<TeacherApplications />}
+        />
+        <Route
           path="/teacher/update-project/:projectId"
           element={<UpdateProject />}
         />
@@ -65,6 +68,9 @@ export default function App() {
         <Route path="/teacher/set-global-deadline" element={<SetGlobalDeadlineWrapper />} />
         <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
         <Route path="/teacher/tickets" element={<TeacherTickets />} />
+
+        {/* Catch-all fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

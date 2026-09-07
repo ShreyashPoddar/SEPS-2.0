@@ -1,33 +1,80 @@
-import sgMail from '@sendgrid/mail';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
 dotenv.config();
 
-// --- Environment Variable Check ---
-// Email is optional: the app runs fine without it (verification sends are
-// currently disabled in the signup controller). Report missing config once, as
-// a warning rather than a "FATAL ERROR" the server then happily survives.
-const requiredEnvVars = ['SENDGRID_API_KEY', 'SENDER_EMAIL', 'CLIENT_URL'];
-const missingEnvVars = requiredEnvVars.filter((name) => !process.env[name]);
+// --- Brevo SMTP Configuration ---
+const SMTP_HOST = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
+const SMTP_PORT = parseInt(process.env.BREVO_SMTP_PORT || "587", 10);
+const SMTP_USER = process.env.BREVO_SMTP_USER || process.env.SMTP_USER;
+const SMTP_KEY = process.env.BREVO_SMTP_KEY || process.env.SMTP_PASS;
+const SENDER_EMAIL = process.env.SENDER_EMAIL || process.env.BREVO_SENDER_EMAIL;
+const SENDER_NAME = process.env.SENDER_NAME || "SEPS Admin";
+const PROJECT_NAME = process.env.PROJECT_NAME || "Project Connect SRM";
 
-export const isMailConfigured = missingEnvVars.length === 0;
+export const isMailConfigured = Boolean(SMTP_USER && SMTP_KEY && SENDER_EMAIL);
+
+// --- Brevo Daily Quota Rate Limiter (Default 285 to keep safe 15 buffer under 300) ---
+export const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || "285", 10);
+let dailyEmailCount = 0;
+let currentDay = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
+/**
+ * Returns current daily email quota stats.
+ */
+export const getDailyMailStats = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== currentDay) {
+    currentDay = today;
+    dailyEmailCount = 0;
+  }
+  return {
+    count: dailyEmailCount,
+    limit: DAILY_EMAIL_LIMIT,
+    remaining: Math.max(0, DAILY_EMAIL_LIMIT - dailyEmailCount),
+    date: currentDay,
+  };
+};
+
+/**
+ * Checks whether an email can be sent within today's quota.
+ */
+export const canSendEmail = () => {
+  const stats = getDailyMailStats();
+  return stats.count < stats.limit;
+};
+
+/**
+ * Increments the daily sent email counter.
+ */
+export const recordEmailSent = () => {
+  dailyEmailCount++;
+  const stats = getDailyMailStats();
+  console.log(`📊 [Brevo Quota] Sent: ${stats.count}/${stats.limit} emails today (${stats.remaining} remaining)`);
+};
 
 if (!isMailConfigured) {
+  const missing = [];
+  if (!SMTP_USER) missing.push("BREVO_SMTP_USER");
+  if (!SMTP_KEY) missing.push("BREVO_SMTP_KEY");
+  if (!SENDER_EMAIL) missing.push("SENDER_EMAIL");
   console.warn(
-    `✉️  Email disabled — missing/empty in .env: ${missingEnvVars.join(', ')}. ` +
-    `Everything else runs normally; set these to enable verification and reset emails.`
+    `✉️  Brevo Email disabled — missing in .env: ${missing.join(", ")}. Everything else runs normally; set these to enable live email delivery.`
   );
 }
 
-// --- SendGrid Configuration ---
-// Only configure when a key is actually present; setApiKey('') makes the SDK
-// complain that the key doesn't start with "SG." on every boot.
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+let transporter = null;
+if (isMailConfigured) {
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: false, // port 587 uses STARTTLS
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_KEY,
+    },
+  });
 }
-
-const SENDER_EMAIL = process.env.SENDER_EMAIL;
-const PROJECT_NAME = process.env.PROJECT_NAME || "Project Connect SRM";
 
 /**
  * Sends a verification email to a new user.
@@ -36,34 +83,57 @@ const PROJECT_NAME = process.env.PROJECT_NAME || "Project Connect SRM";
  * @param {string} token - The unique verification token.
  */
 export const sendVerificationEmail = async (to, name, token) => {
-  const verifyUrl = `${process.env.CLIENT_URL}/verify?token=${token}`;
-  
-  const msg = {
-    to: to,
-    from: SENDER_EMAIL,
+  const verifyUrl = `${process.env.CLIENT_URL || "http://localhost:5176"}/verify?token=${token}`;
+
+  if (!isMailConfigured || !transporter) {
+    console.warn(`✉️  Skipped email to ${to} — Brevo is not configured in .env.`);
+    console.log(`🔑 [Console Fallback Verification Link]: ${verifyUrl} for ${to}`);
+    return { success: false, reason: "NOT_CONFIGURED", fallbackUrl: verifyUrl };
+  }
+
+  if (!canSendEmail()) {
+    console.warn(
+      `⚠️ [Brevo Limit] Daily quota of ${DAILY_EMAIL_LIMIT} emails reached. Suppressing outgoing email to protect account.`
+    );
+    console.log(`🔑 [Console Fallback Verification Link]: ${verifyUrl} for ${to}`);
+    return { success: false, reason: "DAILY_LIMIT_REACHED", fallbackUrl: verifyUrl };
+  }
+
+  const mailOptions = {
+    from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+    to,
     subject: `Verify Your Account | ${PROJECT_NAME}`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2>Hello ${name},</h2>
-        <p>Thank you for signing up! Please verify your email to activate your account:</p>
-        <p style="margin: 20px 0;">
-          <a href="${verifyUrl}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Your Email</a>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
+        <h2 style="color: #1e293b; margin-bottom: 8px;">Hello ${name}, 👋</h2>
+        <p style="color: #475569; font-size: 15px; line-height: 1.6;">
+          Thank you for joining <strong>${PROJECT_NAME}</strong>. Please verify your official email address to activate your account:
         </p>
-        <p>This link will expire in 24 hours.</p>
+        <div style="margin: 28px 0; text-align: center;">
+          <a href="${verifyUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
+            Verify Email Address
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 13px; line-height: 1.5;">
+          This link will expire in 24 hours. If you did not register for an account, please ignore this email.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+          ${PROJECT_NAME} • Department of Electronics & Communication Engineering
+        </p>
       </div>
     `,
   };
 
-  if (!isMailConfigured) {
-    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
-    return;
-  }
-
   try {
-    await sgMail.send(msg);
-    console.log(`✅ Verification email sent successfully to ${to}`);
+    await transporter.sendMail(mailOptions);
+    recordEmailSent();
+    console.log(`✅ [Brevo] Verification email sent successfully to ${to}`);
+    return { success: true };
   } catch (error) {
-    console.error('❌ Error sending verification email via SendGrid:', error);
+    console.error("❌ Error sending verification email via Brevo SMTP:", error.message);
+    console.log(`🔑 [Console Fallback Verification Link]: ${verifyUrl} for ${to}`);
+    return { success: false, reason: "SMTP_ERROR", error: error.message };
   }
 };
 
@@ -73,71 +143,121 @@ export const sendVerificationEmail = async (to, name, token) => {
  * @param {string} name - The recipient's full name.
  */
 export const sendWelcomeEmail = async (to, name) => {
-  const loginUrl = `${process.env.CLIENT_URL}/login`;
-  
-  const msg = {
-    to: to,
-    from: SENDER_EMAIL,
+  if (!isMailConfigured || !transporter) {
+    console.warn(`✉️  Skipped email to ${to} — Brevo is not configured in .env.`);
+    return { success: false, reason: "NOT_CONFIGURED" };
+  }
+
+  if (!canSendEmail()) {
+    console.warn(
+      `⚠️ [Brevo Limit] Daily quota of ${DAILY_EMAIL_LIMIT} emails reached. Welcome email to ${to} suppressed.`
+    );
+    return { success: false, reason: "DAILY_LIMIT_REACHED" };
+  }
+
+  const loginUrl = `${process.env.CLIENT_URL || "http://localhost:5176"}/login`;
+
+  const mailOptions = {
+    from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+    to,
     subject: `Welcome to ${PROJECT_NAME}!`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2>Welcome, ${name}! 🎉</h2>
-        <p>We're excited to have you on board. Your account is now active.</p>
-        <p>You can get started by logging in:</p>
-        <p style="margin: 20px 0;">
-          <a href="${loginUrl}" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login to Your Account</a>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
+        <h2 style="color: #1e293b; margin-bottom: 8px;">Welcome, ${name}! 🎉</h2>
+        <p style="color: #475569; font-size: 15px; line-height: 1.6;">
+          Your account has been successfully verified. You can now access your portal dashboard:
+        </p>
+        <div style="margin: 28px 0; text-align: center;">
+          <a href="${loginUrl}" style="background-color: #16a34a; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
+            Go to Dashboard
+          </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+          ${PROJECT_NAME} • Department of Electronics & Communication Engineering
         </p>
       </div>
     `,
   };
 
-  if (!isMailConfigured) {
-    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
-    return;
-  }
-
   try {
-    await sgMail.send(msg);
-    console.log(`✅ Welcome email sent successfully to ${to}`);
+    await transporter.sendMail(mailOptions);
+    recordEmailSent();
+    console.log(`✅ [Brevo] Welcome email sent successfully to ${to}`);
+    return { success: true };
   } catch (error) {
-    console.error('❌ Error sending welcome email via SendGrid:', error);
+    console.error("❌ Error sending welcome email via Brevo SMTP:", error.message);
+    return { success: false, reason: "SMTP_ERROR", error: error.message };
   }
 };
 
 /**
- * Sends a password reset email.
+ * Sends a password reset / account setup email with a 6-digit OTP.
  * @param {string} to - The recipient's email address.
  * @param {string} name - The recipient's full name.
- * @param {string} token - The unique password reset token.
+ * @param {string} otp - The 6-digit one-time password.
  */
-export const sendResetEmail = async (to, name, token) => {
-  const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
-  
-  const msg = {
-    to: to,
-    from: SENDER_EMAIL,
-    subject: `Password Reset Request | ${PROJECT_NAME}`,
+export const sendResetEmail = async (to, name, otp) => {
+  if (!isMailConfigured || !transporter) {
+    console.warn(`✉️  Skipped email to ${to} — Brevo is not configured in .env.`);
+    console.log(`🔑 [Console Fallback OTP]: ${otp} for ${to}`);
+    return { success: false, reason: "NOT_CONFIGURED", otp };
+  }
+
+  if (!canSendEmail()) {
+    console.warn(
+      `⚠️ [Brevo Limit] Daily quota of ${DAILY_EMAIL_LIMIT} emails reached. Suppressing outgoing email to protect account.`
+    );
+    console.log(`🔑 [Console Fallback OTP]: ${otp} for ${to}`);
+    return { success: false, reason: "DAILY_LIMIT_REACHED", otp };
+  }
+
+  const mailOptions = {
+    from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+    to,
+    subject: `Your OTP for Password Reset | ${PROJECT_NAME}`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2>Hello ${name},</h2>
-        <p>We received a request to reset your password. Click the link below to set a new one:</p>
-        <p style="margin: 20px 0;">
-          <a href="${resetUrl}" style="background-color: #ffc107; color: black; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Your Password</a>
+      <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; color: #1e293b;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; letter-spacing: -0.5px;">${PROJECT_NAME}</h1>
+          <p style="font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500;">Department of Electronics & Communication Engineering</p>
+        </div>
+        
+        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">Hello ${name},</h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
+          We received a request to verify your identity / reset your password for your <strong>${PROJECT_NAME}</strong> account.
         </p>
-        <p>This link will expire in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+
+        <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+          <span style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 10px;">Your One-Time Password (OTP)</span>
+          <div style="font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: monospace;">
+            ${otp}
+          </div>
+          <span style="display: block; font-size: 12px; color: #dc2626; font-weight: 600; margin-top: 10px;">Valid for 10 minutes</span>
+        </div>
+
+        <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 24px;">
+          Enter this 6-digit OTP on the verification screen to set your new password. If you did not make this request, you can safely ignore this email; your account remains secure.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+          ${PROJECT_NAME} • Automated Security Notification
+        </p>
       </div>
     `,
   };
 
-  if (!isMailConfigured) {
-    console.warn(`✉️  Skipped email to ${to} — email is not configured (see .env).`);
-    return;
-  }
-
   try {
-    await sgMail.send(msg);
-    console.log(`✅ Password reset email sent successfully to ${to}`);
+    await transporter.sendMail(mailOptions);
+    recordEmailSent();
+    console.log(`✅ [Brevo] OTP email sent successfully to ${to}`);
+    return { success: true, otp };
   } catch (error) {
-    console.error('❌ Error sending reset email via SendGrid:', error);
+    console.error("❌ Error sending OTP email via Brevo SMTP:", error.message);
+    console.log(`🔑 [Console Fallback OTP]: ${otp} for ${to}`);
+    return { success: false, reason: "SMTP_ERROR", error: error.message, otp };
   }
 };
+
+export const sendResetOtpEmail = sendResetEmail;

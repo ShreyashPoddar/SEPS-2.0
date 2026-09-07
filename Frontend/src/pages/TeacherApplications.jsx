@@ -18,8 +18,14 @@ import {
   Check,
   X,
   Inbox,
+  Clock,
+  Info,
+  ShieldCheck,
+  AlertTriangle,
+  Award,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import { parseStreams } from "../utils/streamUtils";
 
 export default function TeacherApplications() {
   const navigate = useNavigate();
@@ -39,13 +45,10 @@ export default function TeacherApplications() {
     getApplicationsForProject(id)
       .then((res) => {
         const rawApps = Array.isArray(res.data) ? res.data : (res.data?.applications || []);
-        const readyForReview = rawApps.filter(
-          (app) => app.status === "pending_faculty_approval" || app.status === "pending"
-        );
         setData({
           ...(typeof res.data === "object" && !Array.isArray(res.data) ? res.data : {}),
           project: res.data?.project || { projectTitle: "Project Applications" },
-          applications: readyForReview,
+          applications: rawApps,
         });
       })
       .catch((err) => {
@@ -117,96 +120,244 @@ export default function TeacherApplications() {
         <div className="mb-8">
           <button
             onClick={() => navigate("/teacher-dashboard")}
-            className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-slate-200 hover:bg-slate-50 transition mb-4"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-900 rounded-full border-2 border-slate-900 font-bold text-xs shadow-sm transition mb-4"
           >
-            <ArrowLeft className="w-5 h-5 text-cyan-600" />
-            <span className="font-semibold text-gray-700">
-              Back to Dashboard
-            </span>
+            <ArrowLeft className="w-4 h-4 text-slate-900" />
+            <span>Back to Dashboard</span>
           </button>
-          <h1 className="text-3xl font-bold flex items-center gap-3 text-gray-700 mb-2">
-            <FileText className="w-8 h-8 text-cyan-600" />
-            Project Applications
+          <h1 className="text-2xl sm:text-3xl font-black flex items-center gap-3 text-slate-950 mb-1">
+            <FileText className="w-7 h-7 text-slate-950" />
+            <span>Review Project Applications</span>
           </h1>
+          <p className="text-xs text-slate-500 font-medium">Review submitted student teams and allocate projects for this cycle</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mb-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900 mb-8">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-950 mb-3">
             {data.project.title}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-600">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
             <p>
-              <strong>Faculty:</strong> {data.project.facultyName}
+              <strong className="text-slate-900">Faculty Guide:</strong> {data.project.facultyName}
             </p>
-            <p>
-              <strong>Stream:</strong> {data.project.stream}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <strong className="text-slate-900">Eligible Streams:</strong>
+              {parseStreams(data.project.stream).length > 0 ? (
+                parseStreams(data.project.stream).map((str, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200"
+                  >
+                    {str}
+                  </span>
+                ))
+              ) : (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  Open to All
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {data.applications.length === 0 ? (
-          <div className="text-center text-gray-500 bg-white p-10 rounded-xl border border-slate-200 flex flex-col items-center gap-4">
-            <Inbox className="w-16 h-16 text-slate-400" />
-            <h3 className="text-2xl font-bold">
-              No Applications Ready for Review
-            </h3>
-            <p>Check back later to see new applications.</p>
+          <div className="p-12 sm:p-16 bg-white rounded-3xl border-2 border-slate-900 text-center space-y-4 shadow-xl">
+            <div className="w-16 h-16 rounded-3xl bg-slate-100 border-2 border-slate-300 flex items-center justify-center mx-auto text-slate-600">
+              <Inbox className="w-8 h-8" />
+            </div>
+            <div className="max-w-md mx-auto">
+              <h3 className="text-xl font-black text-slate-950">No Applications Received Yet</h3>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 leading-relaxed">
+                Eligible students have not submitted an application for this project yet. Check back once students form teams.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
-            {data.applications.map((app) => (
-              <div
-                key={app._id}
-                className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 flex flex-col justify-between transition hover:shadow-cyan-100 hover:border-cyan-300"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-cyan-100 rounded-full">
+            {data.applications.map((app) => {
+              const isPendingMembers = app.status === "pending_member_approval";
+              const isReadyForReview =
+                app.status === "pending_faculty_approval" || app.status === "pending";
+              const isApproved = app.status === "approved";
+              const confirmedMembers = (app.members || []).filter(
+                (m) => m.status === "approved"
+              ).length;
+              const totalMembers = app.members?.length || 3;
+              const hasP1Block = Boolean(app.blockingPriority1?.hasActiveP1);
+
+              return (
+                <div
+                  key={app._id}
+                  className={`bg-white rounded-3xl shadow-lg border-2 p-6 flex flex-col justify-between transition hover:shadow-2xl space-y-4 ${
+                    app.isFirstComePriority ? "border-emerald-600 ring-2 ring-emerald-500/20" : "border-slate-900"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-slate-950 text-cyan-400 rounded-xl">
                         {app.applicationType === "group" ? (
-                          <Users className="w-5 h-5 text-cyan-600" />
+                          <Users className="w-4 h-4" />
                         ) : (
-                          <User className="w-5 h-5 text-cyan-600" />
+                          <User className="w-4 h-4" />
                         )}
                       </div>
-                      <h3 className="text-xl font-semibold capitalize text-gray-800">
-                        {app.applicationType} Application
-                      </h3>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-base font-extrabold capitalize text-slate-950">
+                            {app.applicationType} Team Application
+                          </h3>
+
+                          {/* First-Come Queue Priority Badge */}
+                          {app.isFirstComePriority ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white flex items-center gap-1 shadow-sm">
+                              <Award className="w-3 h-3 text-amber-300" />
+                              <span>#1 First-Come Priority</span>
+                            </span>
+                          ) : app.queueRank ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-300">
+                              Queue Position #{app.queueRank}
+                            </span>
+                          ) : null}
+
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-900 text-white">
+                            Priority {app.priority || 1}
+                          </span>
+
+                          {isPendingMembers ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>Teammate Confirmations Pending ({confirmedMembers}/{totalMembers})</span>
+                            </span>
+                          ) : isReadyForReview ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3" />
+                              <span>Ready for Faculty Review</span>
+                            </span>
+                          ) : isApproved ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-300">
+                              Approved & Allocated
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300">
+                              {app.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      {app.members.map((member) => (
-                        <div key={member._id} className="text-sm text-gray-600">
-                          <p>
-                            <span className="font-bold">{member.name}</span> (
-                            {member.regNo})
-                          </p>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1.5 justify-end">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {new Date(app.appliedAt || app.createdAt).toLocaleString([], {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 py-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      Applicant Team Members:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {app.members.map((member, idx) => (
+                        <div
+                          key={member._id || idx}
+                          className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <p className="font-extrabold text-xs text-slate-900">{member.name}</p>
+                              <span
+                                className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  member.status === "approved"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {member.status === "approved" ? "Confirmed" : "Pending"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-medium font-mono">
+                              {member.regNo}
+                            </p>
+                            <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
+                              {member.department || "Dept of ECE"}
+                            </p>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500 flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      {new Date(app.appliedAt).toLocaleDateString()}
-                    </p>
+
+                  {/* Priority 2 Gating Alert Banner */}
+                  {hasP1Block && (
+                    <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 text-xs text-amber-950 font-medium flex items-start gap-3 shadow-sm">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-black text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>Action Required: Student Priority 1 Application Active</span>
+                        </p>
+                        <p className="text-slate-800">
+                          Student <strong>{app.blockingPriority1.memberName} ({app.blockingPriority1.memberRegNo})</strong> currently has an active Priority 1 application for <strong>"{app.blockingPriority1.p1ProjectTitle}"</strong>.
+                        </p>
+                        <p className="text-amber-900 font-semibold">
+                          ⚠️ Under institutional policy, the student must manually close/cancel their Priority 1 application before you can approve this Priority 2 team.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions Footer */}
+                  <div className="pt-3 border-t border-slate-200">
+                    {isPendingMembers ? (
+                      <div className="w-full p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-medium flex items-center gap-2.5">
+                        <Info className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>
+                          <strong>Team Confirmation Pending:</strong> {confirmedMembers} of {totalMembers} members have accepted. The proposal will unlock for your official review as soon as all invited students confirm.
+                        </span>
+                      </div>
+                    ) : isReadyForReview ? (
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={() => handleAccept(app._id)}
+                          disabled={hasP1Block}
+                          title={
+                            hasP1Block
+                              ? `Approval locked: Student ${app.blockingPriority1.memberName} must cancel their Priority 1 project first.`
+                              : "Approve this team"
+                          }
+                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-full border-2 transition shadow-sm ${
+                            hasP1Block
+                              ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed"
+                              : "bg-slate-950 hover:bg-slate-800 text-white border-black hover:scale-101 active:scale-99"
+                          }`}
+                        >
+                          <Check className={`w-4 h-4 ${hasP1Block ? "text-slate-400" : "text-emerald-400"}`} />
+                          <span>
+                            {hasP1Block
+                              ? "Approval Locked (Awaiting Student P1 Manual Closure)"
+                              : "Approve Team"}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleReject(app._id)}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-700 rounded-full border-2 border-red-300 transition"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Decline Application</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500 font-semibold text-center py-1">
+                        Application status: <span className="font-bold text-slate-900 capitalize">{app.status.replace(/_/g, " ")}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-3 mt-6 border-t border-slate-200 pt-4">
-                  <button
-                    onClick={() => handleAccept(app._id)}
-                    className="flex-1 flex items-center justify-center gap-2 text-sm bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-md font-semibold transition"
-                  >
-                    <Check className="w-4 h-4" /> Accept
-                  </button>
-                  <button
-                    onClick={() => handleReject(app._id)}
-                    className="flex-1 flex items-center justify-center gap-2 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-md font-semibold transition"
-                  >
-                    <X className="w-4 h-4" /> Reject
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

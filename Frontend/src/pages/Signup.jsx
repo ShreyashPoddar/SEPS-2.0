@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { signupUser } from "../api.js";
+import { signupUser, getCurrentUser } from "../api.js";
 import { toast, Toaster } from "react-hot-toast";
-import { UserPlus, ArrowLeft } from "lucide-react";
+import { UserPlus, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import SlicedWaves from "../components/SlicedWaves";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
 
@@ -16,7 +16,22 @@ export default function Signup() {
     password: "",
     role: "student",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then((res) => {
+        if (res?.data?.role === "teacher") {
+          navigate("/teacher-dashboard", { replace: true });
+        } else if (res?.data?.role === "student") {
+          navigate("/student-dashboard", { replace: true });
+        }
+      })
+      .catch(() => {
+        // Not logged in
+      });
+  }, [navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -254,16 +269,30 @@ export default function Signup() {
             <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Password
             </label>
-            <input
-              type="password"
-              name="password"
-              placeholder="Create a secure password (min. 6 chars)"
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 mt-1 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
-              required
-              minLength={6}
-            />
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Create a secure password (min. 6 chars)"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full pl-4 pr-11 py-2.5 text-slate-900 bg-white/90 border-2 border-black rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm font-medium"
+                required
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-900 transition-colors p-1 focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Framer Motion Submit Button */}

@@ -4,7 +4,9 @@ import {
   getCurrentUser,
   logoutUser,
   getPendingInvitations,
-  getGlobalDeadline
+  getGlobalDeadline,
+  isStudentProfileComplete,
+  getMyApplications,
 } from "../api";
 import { useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
@@ -25,18 +27,21 @@ import {
   RotateCcw,
   Layers,
   UserCheck,
-  FolderOpen
+  FolderOpen,
+  FolderGit2,
+  Lock
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import ApplyModal from "../components/ApplyModal";
 import TicketTrackerWidget from "../components/TicketTrackerWidget";
+import { parseStreams } from "../utils/streamUtils";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [globalDeadline, setGlobalDeadline] = useState("");
   const [user, setUser] = useState(null);
-  const [appliedProjectIds, setAppliedProjectIds] = useState(new Set());
+  const [myApplications, setMyApplications] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +75,12 @@ export default function StudentDashboard() {
       .catch((err) => console.error("Failed to fetch invitations:", err));
   }, []);
 
+  const fetchMyApplications = useCallback(() => {
+    getMyApplications()
+      .then((res) => setMyApplications(res.data || []))
+      .catch((err) => console.error("Failed to fetch my applications:", err));
+  }, []);
+
   const loadProjects = useCallback(() => {
     setLoading(true);
     getAllProjects()
@@ -86,12 +97,25 @@ export default function StudentDashboard() {
       .then((res) => {
         if (res.data?.role !== "student") {
           navigate("/teacher-dashboard");
+        } else if (!isStudentProfileComplete(res.data)) {
+          toast.error("Please complete and save your profile before accessing the dashboard.", {
+            id: "profile-required-toast",
+            duration: 5000,
+          });
+          navigate("/student-profile", { replace: true, state: { profileRequired: true } });
         } else {
           setUser(res.data);
           fetchInvitations();
+          fetchMyApplications();
         }
       })
-      .catch(() => navigate("/login"));
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          navigate("/login");
+        } else {
+          toast.error("Session verification delayed. Connecting to server...");
+        }
+      });
 
     loadProjects();
 
@@ -119,11 +143,12 @@ export default function StudentDashboard() {
     return Array.from(names).sort();
   }, [projects]);
 
-  // Extract distinct streams from current projects
+
+  // Extract distinct streams from current projects (individualized)
   const streamOptions = useMemo(() => {
     const streams = new Set();
     projects.forEach((p) => {
-      if (p.stream) streams.add(p.stream);
+      parseStreams(p.stream).forEach((s) => streams.add(s));
     });
     return Array.from(streams).sort();
   }, [projects]);
@@ -168,9 +193,13 @@ export default function StudentDashboard() {
       result = result.filter((p) => p.facultyName === selectedFaculty);
     }
 
-    // 4. Stream Filter
+    // 4. Stream Filter (matches if any individual stream matches)
     if (selectedStream !== "all") {
-      result = result.filter((p) => p.stream === selectedStream);
+      result = result.filter((p) =>
+        parseStreams(p.stream).some(
+          (s) => s.toLowerCase() === selectedStream.toLowerCase()
+        )
+      );
     }
 
     // 5. Vacancy Filter
@@ -209,8 +238,24 @@ export default function StudentDashboard() {
     sortBy,
   ]);
 
+  const appliedProjectsMap = useMemo(() => {
+    const map = new Map();
+    myApplications.forEach((app) => {
+      if (app.projectId) {
+        map.set(app.projectId, app);
+      }
+    });
+    return map;
+  }, [myApplications]);
+
+  const applicationCount = myApplications.length;
+  const hasReachedMaxLimit = applicationCount >= 2;
+  const isAllocated = myApplications.some((app) => app.status === "approved" || app.teamId);
+  const nextPriority = applicationCount === 0 ? 1 : applicationCount === 1 ? 2 : null;
+
   const handleApplySuccess = (projectId) => {
-    setAppliedProjectIds((prev) => new Set(prev).add(projectId));
+    fetchMyApplications();
+    loadProjects();
   };
 
   const handleLogout = async () => {
@@ -256,6 +301,7 @@ export default function StudentDashboard() {
         <ApplyModal
           project={selectedProject}
           currentUser={user}
+          nextPriority={nextPriority}
           onClose={() => setSelectedProject(null)}
           onApplySuccess={handleApplySuccess}
         />
@@ -304,6 +350,69 @@ export default function StudentDashboard() {
           </div>
         )}
 
+        {/* 🏛️ INSTITUTIONAL MENTORSHIP & SECTION ALLOCATION CARD */}
+        {user && (
+          <div className="mb-8 p-5 bg-white rounded-3xl border-2 border-slate-900 shadow-xl">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              {/* Left: Section & Student Info */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-700 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-cyan-600/20">
+                  {user.section?.name || user.sectionName || "A"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Official Allocation</span>
+                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
+                      Section {user.section?.name || user.sectionName || "A"}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-950 mt-0.5">
+                    {user.departmentRel?.name || user.department || "Dept of ECE"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold">
+                    Academic Year 2026-2027 • IV Year Capstone Cohort
+                  </p>
+                </div>
+              </div>
+
+              {/* Right: Faculty Advisor & HOD Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 lg:border-l lg:border-slate-200 lg:pl-6">
+                {/* Faculty Advisor */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-blue-400 transition shadow-sm flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center text-lg font-bold flex-shrink-0">
+                    👨‍🏫
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-black text-blue-800 tracking-wider">Faculty Advisor</p>
+                    <p className="text-xs font-black text-slate-900 truncate">
+                      {user.facultyAdvisor?.fullName || "Dr. M. K. Srilekha"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium truncate">
+                      {user.facultyAdvisor?.email || "srilekhm@srmist.edu.in"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* HOD */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-400 transition shadow-sm flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-900 flex items-center justify-center text-lg font-bold flex-shrink-0">
+                    🏛️
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-black text-indigo-800 tracking-wider">Head of Department (HOD)</p>
+                    <p className="text-xs font-black text-slate-900 truncate">
+                      {user.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium truncate">
+                      {user.departmentRel?.hod?.email || "hodece@srmist.edu.in"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 🎫 LIVE ROSTER & TICKET TRACKER PORTAL WIDGET */}
         <TicketTrackerWidget currentUser={user} />
 
@@ -312,12 +421,37 @@ export default function StudentDashboard() {
           {/* Header & Result Counter */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-950 flex items-center gap-2.5">
-                <SlidersHorizontal className="w-6 h-6 text-slate-950" />
-                <span>Capstone Project Directory</span>
-              </h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-950 flex items-center gap-2.5">
+                  <SlidersHorizontal className="w-6 h-6 text-slate-950" />
+                  <span>Capstone Project Directory</span>
+                </h2>
+
+                {/* 🎯 APPLICATION QUOTA BADGE (MAX 2) */}
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-black tracking-wide border-2 flex items-center gap-1.5 shadow-sm ${
+                    hasReachedMaxLimit || isAllocated
+                      ? "bg-slate-900 text-white border-slate-950"
+                      : applicationCount === 1
+                      ? "bg-amber-100 text-amber-950 border-amber-400"
+                      : "bg-cyan-100 text-cyan-950 border-cyan-400"
+                  }`}
+                >
+                  <FolderGit2 className="w-3.5 h-3.5" />
+                  <span>
+                    Applications: {applicationCount} / 2 Max
+                    {hasReachedMaxLimit
+                      ? " (Limit Reached)"
+                      : isAllocated
+                      ? " (Allocated)"
+                      : applicationCount === 1
+                      ? " (Priority 2 Available)"
+                      : " (Priority 1 Available)"}
+                  </span>
+                </span>
+              </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Explore, filter, and apply for approved faculty capstone projects
+                Students can apply for up to 2 projects (Priority 1 & 2). Explore and assemble your 3-member team.
               </p>
             </div>
 
@@ -339,10 +473,10 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Primary Controls Row: Search + Faculty + Availability + Sort */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
+          {/* Primary Controls Row: Search + Faculty + Stream + Availability + Sort */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3.5">
             {/* Search Bar */}
-            <div className="md:col-span-5 relative flex items-center">
+            <div className="md:col-span-4 relative flex items-center">
               <Search className="absolute left-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -363,16 +497,32 @@ export default function StudentDashboard() {
             </div>
 
             {/* Faculty Filter */}
-            <div className="md:col-span-3">
+            <div className="md:col-span-2">
               <select
                 value={selectedFaculty}
                 onChange={(e) => setSelectedFaculty(e.target.value)}
                 className="w-full py-2.5 px-3 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black transition"
               >
-                <option value="all">👨‍🏫 All Faculty Guides</option>
+                <option value="all">👨‍🏫 All Faculty</option>
                 {facultyOptions.map((fac) => (
                   <option key={fac} value={fac}>
                     {fac}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Stream Filter */}
+            <div className="md:col-span-2">
+              <select
+                value={selectedStream}
+                onChange={(e) => setSelectedStream(e.target.value)}
+                className="w-full py-2.5 px-3 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black transition"
+              >
+                <option value="all">🎓 All Streams</option>
+                {streamOptions.map((str) => (
+                  <option key={str} value={str}>
+                    {str}
                   </option>
                 ))}
               </select>
@@ -504,6 +654,15 @@ export default function StudentDashboard() {
                 </span>
               )}
 
+              {selectedStream !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 border border-blue-300 text-xs font-semibold text-blue-950">
+                  Stream: {selectedStream}
+                  <button onClick={() => setSelectedStream("all")} className="hover:text-black">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
               {vacancyFilter !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-xs font-semibold text-emerald-950">
                   Open Vacancies
@@ -568,7 +727,8 @@ export default function StudentDashboard() {
             /* Active Project Cards Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProjects.map((p) => {
-                const isApplied = appliedProjectIds.has(p._id);
+                const appliedApp = appliedProjectsMap.get(p._id);
+                const isApplied = Boolean(appliedApp);
 
                 return (
                   <div
@@ -597,6 +757,25 @@ export default function StudentDashboard() {
                         {p.projectTitle}
                       </h3>
 
+                      {/* Eligible Streams Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Streams:</span>
+                        {parseStreams(p.stream).length > 0 ? (
+                          parseStreams(p.stream).map((str, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200"
+                            >
+                              {str}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            All Branches
+                          </span>
+                        )}
+                      </div>
+
                       <p className="text-xs text-slate-600 mt-2 line-clamp-3 leading-relaxed font-medium">
                         {p.description}
                       </p>
@@ -616,9 +795,11 @@ export default function StudentDashboard() {
                     <button
                       type="button"
                       onClick={() => setSelectedProject(p)}
-                      disabled={isApplied}
+                      disabled={isApplied || hasReachedMaxLimit || isAllocated}
                       className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-full font-extrabold text-xs sm:text-sm border-2 border-black transition shadow-md ${
                         isApplied
+                          ? "bg-emerald-50 text-emerald-900 border-emerald-500 cursor-not-allowed"
+                          : hasReachedMaxLimit || isAllocated
                           ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed"
                           : "bg-slate-950 hover:bg-slate-800 text-white hover:scale-102 active:scale-98"
                       }`}
@@ -626,12 +807,22 @@ export default function StudentDashboard() {
                       {isApplied ? (
                         <>
                           <CheckCircle className="w-4 h-4 text-emerald-600" />
-                          <span>Applied</span>
+                          <span>Applied ({appliedApp.priority ? `Priority ${appliedApp.priority}` : "Submitted"})</span>
+                        </>
+                      ) : hasReachedMaxLimit ? (
+                        <>
+                          <Lock className="w-4 h-4 text-slate-400" />
+                          <span>Application Limit Reached (Max 2)</span>
+                        </>
+                      ) : isAllocated ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Allocated to Project</span>
                         </>
                       ) : (
                         <>
                           <Send className="w-4 h-4" />
-                          <span>Apply as Team Leader</span>
+                          <span>Apply as Team Leader {nextPriority ? `(Priority ${nextPriority})` : ""}</span>
                         </>
                       )}
                     </button>
