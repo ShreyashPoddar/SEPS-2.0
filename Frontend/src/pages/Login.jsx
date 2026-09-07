@@ -378,12 +378,19 @@ export default function Login() {
       const res = await verifyStudentEmail({ regNo, email: emailVal });
       const data = res?.data || res;
       setSetupEmail(emailVal);
-      setSuccessMsg(data?.message || `OTP sent to ${emailVal}`);
+      if (data?.setupOtp) {
+        setOtp(data.setupOtp);
+        setSuccessMsg(data?.message || `Verification OTP generated: ${data.setupOtp}`);
+      } else {
+        setSuccessMsg(data?.message || `OTP sent to ${emailVal}`);
+      }
       setStep(4);
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Failed to verify email. Please ensure you entered the correct institutional email."
+          (err.code === "ECONNABORTED"
+            ? "Request timed out connecting to the server. Please try again."
+            : "Failed to verify email. Please ensure you entered the correct institutional email.")
       );
     } finally {
       setLoading(false);

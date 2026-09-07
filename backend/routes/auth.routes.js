@@ -18,10 +18,21 @@ import { getDailyMailStats } from "../lib/mailer.js";
 const router = express.Router();
 
 // ─── IP Rate Limiting ───────────────────────────────────────────
-// Protects against automated script attacks & OTP spam flooding
+// Step 1: Identifier lookup (entering Reg No / Email). Generous limit for shared campus Wi-Fi
+const identificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // 60 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Too many identification requests from this IP. Please wait a few minutes before trying again.",
+  },
+});
+
+// Protects endpoints that actually trigger outbound OTP emails
 const otpRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // max 5 OTP/identification requests per IP per 15 minutes (protects Brevo daily email limit)
+  max: 20, // 20 OTP requests per IP per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -31,7 +42,7 @@ const otpRequestLimiter = rateLimit({
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // max 15 login attempts per IP per 15 minutes (protects Render 0.1 CPU against bcrypt spikes)
+  max: 30, // max 30 login attempts per IP per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -47,7 +58,7 @@ router.get("/email-quota", (req, res) => {
 });
 
 // Two-Step Authentication: Step 1 identification
-router.post("/identify", otpRequestLimiter, identifyUser);
+router.post("/identify", identificationLimiter, identifyUser);
 
 // Login with email/regNo & password
 router.post("/login", loginLimiter, login);

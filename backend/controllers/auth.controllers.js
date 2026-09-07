@@ -17,7 +17,7 @@ export const checkUserOtpRateLimit = (identifier) => {
   const key = identifier.trim().toLowerCase();
   const now = Date.now();
   const ONE_HOUR = 60 * 60 * 1000;
-  const COOLDOWN = 60 * 1000; // 60 seconds
+  const COOLDOWN = 20 * 1000; // 20 seconds cooldown
 
   // Clean entries older than 1 hour
   const history = (userOtpHistory.get(key) || []).filter((t) => now - t < ONE_HOUR);
@@ -35,12 +35,12 @@ export const checkUserOtpRateLimit = (identifier) => {
     }
   }
 
-  if (history.length >= 3) {
+  if (history.length >= 10) {
     const oldest = history[0];
     const waitMinutes = Math.ceil((ONE_HOUR - (now - oldest)) / (60 * 1000));
     return {
       allowed: false,
-      message: `Maximum OTP request limit reached (3 per hour). Please try again in ${waitMinutes} minute(s).`,
+      message: `Maximum OTP request limit reached (10 per hour). Please try again in ${waitMinutes} minute(s).`,
       waitMinutes,
     };
   }
@@ -792,6 +792,7 @@ export const verifyStudentEmail = async (req, res) => {
     return res.status(200).json({
       message: `A 6-digit OTP has been generated for ${emailLower}.${quotaNotice} Enter it along with your new password to complete setup.`,
       email: emailLower,
+      ...(mailResult?.success === false ? { setupOtp: otp } : {}),
     });
   } catch (error) {
     console.error("Error in verifyStudentEmail:", error.message);
