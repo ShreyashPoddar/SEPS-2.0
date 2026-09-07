@@ -117,20 +117,20 @@ export const identifyUser = async (req, res) => {
     }
 
     if (user.role === "student") {
-      // Determine if student is entering for the first time:
-      // 1. Student has no email registered yet (!user.email)
-      // 2. OR student has no password (!user.password)
-      // 3. OR student's password still matches their default regNo or seed password
+      // A student only requires initial email verification if:
+      // 1. They have no institutional email registered yet (!user.email)
+      // 2. OR they have no password set (!user.password)
+      // 3. OR their account has not completed verification yet (!user.isVerified)
       let isFirstTime = false;
-      if (!user.email || !user.password) {
+      if (!user.email || !user.password || !user.isVerified) {
         isFirstTime = true;
       } else if (user.regNo && user.password) {
-        const isDefaultPassword =
+        // Only if they have never set an email or still use their initial regNo as password
+        const isRegNoPassword =
           (await bcrypt.compare(user.regNo, user.password)) ||
           (await bcrypt.compare(user.regNo.toUpperCase(), user.password)) ||
-          (await bcrypt.compare(user.regNo.toLowerCase(), user.password)) ||
-          (await bcrypt.compare("password123", user.password));
-        if (isDefaultPassword) {
+          (await bcrypt.compare(user.regNo.toLowerCase(), user.password));
+        if (isRegNoPassword && !user.isVerified) {
           isFirstTime = true;
         }
       }
@@ -354,7 +354,7 @@ export const login = async (req, res) => {
     // submitted plaintext password matches the regNo we know they have never
     // changed it, so we force the email-verification + password-setup flow
     // before issuing any session token.
-    if (user.role === "student" && user.regNo) {
+    if (user.role === "student" && user.regNo && (!user.email || !user.isVerified)) {
       const isDefaultPassword = password === user.regNo ||
         password === user.regNo.toUpperCase() ||
         password === user.regNo.toLowerCase();
