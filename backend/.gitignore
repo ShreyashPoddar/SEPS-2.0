@@ -4,3 +4,10 @@ node_modules
 # Runtime logs from running the server detached
 server.log
 server.err.log
+
+# Sensitive data and credential files
+*.xlsx
+*.xls
+*.csv
+*passwords*
+

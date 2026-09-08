@@ -225,14 +225,6 @@ export const logoutUser = async () => {
   }
 };
 
-export const forgotPassword = (data) =>
-  withFallback(
-    () => API.post("/auth/forgot-password", {
-      identifier: data.identifier || data.email || data.regNo,
-      email: data.email || data.identifier,
-    }),
-    () => ({ message: `Password reset link has been dispatched for ${data.identifier || data.email || "your account"}.` })
-  );
 
 export const getCurrentUser = async () => {
   try {
@@ -333,22 +325,6 @@ export const updateProfile = (data) =>
     }
   );
 
-export const resetPassword = (data) =>
-  withFallback(
-    () => API.post("/auth/reset-password", data),
-    () => ({ message: "Password has been reset successfully!" })
-  );
-
-// Student first-time login: submit institutional email to get an OTP
-export const verifyStudentEmail = (data) =>
-  withFallback(
-    () => API.post("/auth/verify-student-email", data),
-    () => ({ message: "OTP sent to your institutional email." })
-  );
-
-// Change password for logged-in user (requires current password)
-export const changePassword = (data) =>
-  API.post("/auth/change-password", data);
 
 
 // --- PROJECT ROUTES ---

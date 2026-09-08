@@ -7,7 +7,6 @@ import {
 import LandingPage from "./pages/LandingPage.jsx";
 import AboutPage from "./pages/AboutPage.jsx";
 import Login from "./pages/Login.jsx";
-import ForgotPassword from "./pages/ForgotPassword.jsx";
 import StudentDashboard from "./pages/StudentDahboard.jsx";
 import TeacherDashboard from "./pages/TeacherDashboard.jsx";
 import StudentProfile from "./pages/StudentProfile.jsx";
@@ -15,9 +14,8 @@ import TeacherProfile from "./pages/TeacherProfile.jsx";
 import TeacherApplications from "./pages/TeacherApplications.jsx";
 import UpdateProject from "./pages/UpdateProject.jsx";
 import Notifications from "./pages/Notifications.jsx";
-import MyTeams from "./pages/MyTeams.jsx"; // Import the new page
+import MyTeams from "./pages/MyTeams.jsx";
 import SetGlobalDeadline from "./pages/SetGlobalDeadline.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
 import StatisticsReport from "./pages/StatisticsReport.jsx";
 import TeacherTickets from "./pages/TeacherTickets.jsx";
 import { useEffect, useState } from "react";
@@ -41,8 +39,8 @@ export default function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Navigate to="/login" replace />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+        <Route path="/reset-password" element={<Navigate to="/login" replace />} />
 
         {/* Student Routes */}
         <Route path="/student-dashboard" element={<StudentDashboard />} />

@@ -1,54 +1,44 @@
 import { generateToken } from "../lib/utils.js";
 import prisma from "../lib/db.js";
 import bcrypt from "bcryptjs";
-import { sendWelcomeEmail, sendVerificationEmail, sendResetEmail } from "../lib/mailer.js";
-import crypto from "crypto";
 
-// ─── Per-User OTP Rate Limiting (Cooldown & Hourly Quota) ───────────────────
-const userOtpHistory = new Map(); // key (email/regNo) -> Array of epoch timestamps
+export function getStudentPasswords(fullName, regNo) {
+  const parts = (fullName || "")
+    .trim()
+    .split(/\s+/)
+    .map((p) => p.replace(/[^a-zA-Z]/g, ""))
+    .filter(Boolean);
 
-/**
- * Enforces:
- *  - Minimum 60-second cooldown between consecutive OTP requests for the same user.
- *  - Maximum 3 OTP requests in any rolling 1-hour window.
- */
-export const checkUserOtpRateLimit = (identifier) => {
-  if (!identifier) return { allowed: true };
-  const key = identifier.trim().toLowerCase();
-  const now = Date.now();
-  const ONE_HOUR = 60 * 60 * 1000;
-  const COOLDOWN = 20 * 1000; // 20 seconds cooldown
+  if (parts.length === 0) {
+    const last6 = (regNo || "").replace(/\D/g, "").slice(-6);
+    return ["srmx" + last6];
+  }
 
-  // Clean entries older than 1 hour
-  const history = (userOtpHistory.get(key) || []).filter((t) => now - t < ONE_HOUR);
+  const last6 = (regNo || "").replace(/\D/g, "").slice(-6);
+  const firstName = parts[0].toLowerCase();
+  const passwords = [];
 
-  if (history.length > 0) {
-    const lastRequest = history[history.length - 1];
-    const elapsed = now - lastRequest;
-    if (elapsed < COOLDOWN) {
-      const waitSeconds = Math.ceil((COOLDOWN - elapsed) / 1000);
-      return {
-        allowed: false,
-        message: `Please wait ${waitSeconds} seconds before requesting another OTP.`,
-        waitSeconds,
-      };
+  // Primary: First name (or first name + surname if < 4 letters)
+  let primaryPrefix = "";
+  if (firstName.length >= 4) {
+    primaryPrefix = firstName.slice(0, 4);
+  } else {
+    const surname = parts.slice(1).join("").toLowerCase();
+    primaryPrefix = (firstName + surname).slice(0, 4);
+    while (primaryPrefix.length < 4) primaryPrefix += "x";
+  }
+  passwords.push(primaryPrefix + last6);
+
+  // Secondary: If first word was a 1-2 letter initial (e.g. 'R' in 'R SRIVATHSAN'), also allow 'sriv010018'
+  if (firstName.length < 4 && parts.length > 1) {
+    const mainWord = parts.find((p) => p.length >= 4);
+    if (mainWord) {
+      passwords.push(mainWord.toLowerCase().slice(0, 4) + last6);
     }
   }
 
-  if (history.length >= 10) {
-    const oldest = history[0];
-    const waitMinutes = Math.ceil((ONE_HOUR - (now - oldest)) / (60 * 1000));
-    return {
-      allowed: false,
-      message: `Maximum OTP request limit reached (10 per hour). Please try again in ${waitMinutes} minute(s).`,
-      waitMinutes,
-    };
-  }
-
-  history.push(now);
-  userOtpHistory.set(key, history);
-  return { allowed: true };
-};
+  return Array.from(new Set(passwords));
+}
 
 export const signup = async (req, res) => {
   return res.status(403).json({
@@ -80,7 +70,7 @@ export const identifyUser = async (req, res) => {
         return res.status(400).json({ message: "Invalid email id" });
       }
     } else if (!isAdmin) {
-      // SRM registration number format: RA23xxxxxxxxxxx (RA followed by 13 digits)
+      // SRM registration number format: RA followed by digits
       const REG_NO_REGEX = /^RA[0-9]{13}$/i;
       if (!REG_NO_REGEX.test(rawId)) {
         return res.status(400).json({ message: "Invalid registration number" });
@@ -117,36 +107,6 @@ export const identifyUser = async (req, res) => {
     }
 
     if (user.role === "student") {
-      // A student only requires initial email verification if:
-      // 1. They have no institutional email registered yet (!user.email)
-      // 2. OR they have no password set (!user.password)
-      // 3. OR their account has not completed verification yet (!user.isVerified)
-      let isFirstTime = false;
-      if (!user.email || !user.password || !user.isVerified) {
-        isFirstTime = true;
-      } else if (user.regNo && user.password) {
-        // Only if they have never set an email or still use their initial regNo as password
-        const isRegNoPassword =
-          (await bcrypt.compare(user.regNo, user.password)) ||
-          (await bcrypt.compare(user.regNo.toUpperCase(), user.password)) ||
-          (await bcrypt.compare(user.regNo.toLowerCase(), user.password));
-        if (isRegNoPassword && !user.isVerified) {
-          isFirstTime = true;
-        }
-      }
-
-      if (isFirstTime) {
-        return res.status(200).json({
-          role: "student",
-          fullName: user.fullName,
-          regNo: user.regNo,
-          department: user.department,
-          hasPassword: false,
-          requireEmailSetup: true,
-          message: `Welcome, ${user.fullName}. First-time login detected. Please enter your official SRM email to activate your account.`,
-        });
-      }
-
       return res.status(200).json({
         role: "student",
         fullName: user.fullName,
@@ -154,60 +114,17 @@ export const identifyUser = async (req, res) => {
         department: user.department,
         email: user.email,
         hasPassword: true,
-        requireEmailSetup: false,
         message: `Welcome back, ${user.fullName}. Please enter your password to continue.`,
       });
     }
 
     if (user.role === "teacher") {
-      const hasPassword = Boolean(user.password && user.password.trim().length > 0);
-
-      if (!hasPassword) {
-        // Enforce per-user OTP rate limiting
-        const rateCheck = checkUserOtpRateLimit(user.email);
-        if (!rateCheck.allowed) {
-          return res.status(429).json({ message: rateCheck.message });
-        }
-
-        // Teacher has blank password -> generate 6-digit OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const hashedToken = crypto.createHash("sha256").update(otp).digest("hex");
-        const tokenExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            resetPasswordToken: hashedToken,
-            resetPasswordExpires: tokenExpires,
-          },
-        });
-
-        const mailResult = await sendResetEmail(user.email, user.fullName, otp);
-
-        const setupUrl = `${process.env.CLIENT_URL || "http://localhost:5176"}/reset-password?email=${encodeURIComponent(user.email)}`;
-        console.log(`🔑 [Faculty OTP] 6-Digit OTP for ${user.fullName} (${user.email}): ${otp}`);
-
-        const quotaNotice = mailResult?.reason === "DAILY_LIMIT_REACHED"
-          ? " (Daily email quota reached; please check with the coordinator or administrator for your activation OTP)."
-          : "";
-
-        return res.status(200).json({
-          role: "teacher",
-          fullName: user.fullName,
-          email: user.email,
-          hasPassword: false,
-          setupUrl,
-          message: `Verification OTP generated for your SRM email (${user.email}).${quotaNotice} Please check your inbox and enter the 6-digit OTP to set your password.`,
-        });
-      }
-
-      // Teacher already has password set
       return res.status(200).json({
         role: "teacher",
         fullName: user.fullName,
         email: user.email,
         hasPassword: true,
-        message: `Welcome back, ${user.fullName}. Please enter your password.`,
+        message: `Welcome back, ${user.fullName}. Please enter your password to continue.`,
       });
     }
 
@@ -215,76 +132,6 @@ export const identifyUser = async (req, res) => {
   } catch (error) {
     console.error("Error in identifyUser controller:", error.message);
     return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-export const forgotPassword = async (req, res) => {
-  const { email, identifier, regNo } = req.body;
-  const loginId = (identifier || email || regNo || "").trim();
-
-  if (!loginId) return res.status(400).json({ message: "Email or Register Number is required" });
-
-  try {
-    const searchEmails = [loginId.toLowerCase()];
-    if (
-      loginId.toLowerCase() === "admin" ||
-      loginId.toLowerCase() === "admin123" ||
-      loginId.toLowerCase() === "sepsadmin" ||
-      loginId === "999999"
-    ) {
-      searchEmails.push("sepsadmin@gmail.com", "admin123@srmist.edu.in");
-    }
-
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: { in: searchEmails } },
-          { regNo: loginId.toUpperCase() },
-          { regNo: loginId },
-        ],
-      },
-    });
-    if (!user) {
-      return res.status(404).json({ message: "Invalid email id" });
-    }
-
-    if (!user.email) {
-      return res.status(400).json({
-        message: "This student account has not been activated yet. Please sign in with your Register Number on the login page to set up your account.",
-      });
-    }
-
-    // Enforce per-user OTP rate limiting
-    const rateCheck = checkUserOtpRateLimit(user.email || loginId);
-    if (!rateCheck.allowed) {
-      return res.status(429).json({ message: rateCheck.message });
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedToken = crypto.createHash("sha256").update(otp).digest("hex");
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
-      },
-    });
-
-    console.log(`🔑 [Forgot Password OTP] 6-Digit OTP for ${user.fullName} (${user.email}): ${otp}`);
-    const mailResult = await sendResetEmail(user.email, user.fullName, otp);
-
-    const quotaNotice = mailResult?.reason === "DAILY_LIMIT_REACHED"
-      ? " (Daily email quota reached; please contact the administrator for your OTP)."
-      : "";
-
-    res.status(200).json({
-      message: `A 6-digit OTP has been generated for your registered email address.${quotaNotice}`,
-      email: user.email,
-    });
-  } catch (err) {
-    console.error("❌ Error in forgotPassword controller:", err.message);
-    res.status(500).json({ message: "An error occurred while trying to send the reset email. Please try again later." });
   }
 };
 
@@ -330,17 +177,17 @@ export const login = async (req, res) => {
       return res.status(404).json({ message: "Invalid registration number" });
     }
 
-    if (user.role === "teacher" && (!user.password || user.password.trim().length === 0)) {
-      return res.status(400).json({
-        message: "Your password has not been set yet. Please use Step 1 to receive your activation link via your official SRM email.",
-      });
-    }
-
     if (!user.password) {
-      return res.status(400).json({ message: "Account setup required. Please enter your ID on Step 1." });
+      return res.status(400).json({ message: "No password configured for this account. Please contact coordinator." });
     }
 
     let isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect && user.role === "student" && user.regNo) {
+      const candidates = getStudentPasswords(user.fullName, user.regNo);
+      if (candidates.includes(password.trim().toLowerCase())) {
+        isPasswordCorrect = true;
+      }
+    }
     if (!isPasswordCorrect && user.regNo && (user.regNo.startsWith("RA99999999") || user.regNo === "RA2399999999999")) {
       if (password === "RA999999999999" || password === "RA9999999999999" || password === "RA2399999999999") {
         isPasswordCorrect = true;
@@ -349,28 +196,7 @@ export const login = async (req, res) => {
 
     if (!isPasswordCorrect) return res.status(400).json({ message: "Invalid credentials." });
 
-    // ── First-time student login detection ─────────────────────────────────
-    // Students are seeded with their Reg No as the initial password. If the
-    // submitted plaintext password matches the regNo we know they have never
-    // changed it, so we force the email-verification + password-setup flow
-    // before issuing any session token.
-    if (user.role === "student" && user.regNo && (!user.email || !user.isVerified)) {
-      const isDefaultPassword = password === user.regNo ||
-        password === user.regNo.toUpperCase() ||
-        password === user.regNo.toLowerCase();
-
-      if (isDefaultPassword) {
-        return res.status(200).json({
-          requireEmailSetup: true,
-          regNo: user.regNo,
-          fullName: user.fullName,
-          message: "First-time login detected. Please verify your institutional email to set a new password.",
-        });
-      }
-    }
-    // ── End first-time detection ────────────────────────────────────────────
-
-    // Mark as verified on successful login
+    // Mark as verified on successful login if needed
     if (!user.isVerified) {
       await prisma.user.update({
         where: { id: user.id },
@@ -624,218 +450,5 @@ export const checkAuth = (req, res) => {
   } catch (error) {
     console.error("Error in checkAuth:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-export const verifyEmail = async (req, res) => {
-  const { token } = req.query;
-  if (!token) return res.status(400).json({ message: "Token is missing." });
-
-  try {
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
-    const user = await prisma.user.findFirst({
-      where: {
-        verificationToken: hashedToken,
-        tokenExpires: { gt: new Date() },
-      },
-    });
-
-    if (!user) return res.status(400).json({ message: "Invalid or expired token." });
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isVerified: true, verificationToken: null, tokenExpires: null },
-    });
-
-    res.status(200).json({ message: "Email verified successfully! You can now log in." });
-  } catch (err) {
-    console.error("Verification error:", err.message);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-export const resetPassword = async (req, res) => {
-  const { token, otp, code, email, identifier, regNo, password } = req.body;
-  const rawCode = (otp || code || token || "").trim();
-  const loginKey = (email || identifier || regNo || "").trim().toLowerCase();
-
-  if (!rawCode || !password) {
-    return res.status(400).json({ message: "6-digit OTP and new password are required." });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ message: "Password must be at least 6 characters long." });
-  }
-
-  const hashedToken = crypto.createHash("sha256").update(rawCode).digest("hex");
-  const searchCodes = [hashedToken, rawCode];
-
-  let user = null;
-  if (loginKey) {
-    user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: loginKey },
-          { email: `${loginKey}@srmist.edu.in` },
-          { regNo: loginKey.toUpperCase() },
-          { regNo: loginKey },
-        ],
-        AND: [
-          { resetPasswordToken: { in: searchCodes } },
-          { resetPasswordExpires: { gt: new Date() } },
-        ],
-      },
-    });
-  } else {
-    user = await prisma.user.findFirst({
-      where: {
-        resetPasswordToken: { in: searchCodes },
-        resetPasswordExpires: { gt: new Date() },
-      },
-    });
-  }
-
-  if (!user) {
-    return res.status(400).json({ message: "Invalid or expired OTP. Please request a new code." });
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      password: hashedPassword,
-      isVerified: true,
-      resetPasswordToken: null,
-      resetPasswordExpires: null,
-    },
-  });
-
-  res.status(200).json({ message: "Password updated successfully! You can now log in." });
-};
-
-// ─── Student First-Time Email Verification ──────────────────────────────────
-// Called after a student successfully authenticates with their default password
-// (= their Reg No). They must supply an institutional email whose local part
-// (the part before @) matches their Reg No. We store the email, generate a
-// 6-digit OTP and send it so the student can then set a real password.
-export const verifyStudentEmail = async (req, res) => {
-  const { regNo, email } = req.body;
-
-  if (!regNo || !email) {
-    return res.status(400).json({ message: "Register Number and email are required." });
-  }
-
-  // SRM institutional email format: <2 letters><4 digits>@srmist.edu.in
-  // e.g. sp7170@srmist.edu.in, ab1234@srmist.edu.in
-  const emailLower = email.trim().toLowerCase();
-  const SRM_EMAIL_REGEX = /^[a-z]{2}[0-9]{4}@srmist\.edu\.in$/;
-
-  if (!SRM_EMAIL_REGEX.test(emailLower)) {
-    return res.status(400).json({
-      message: `Invalid email format. Please use your SRM institutional email in the format: ab1234@srmist.edu.in (2 letters + 4 digits + @srmist.edu.in).`,
-    });
-  }
-
-  try {
-    const user = await prisma.user.findFirst({
-      where: { regNo: { in: [regNo.trim(), regNo.trim().toUpperCase(), regNo.trim().toLowerCase()] } },
-    });
-
-    if (!user || user.role !== "student") {
-      return res.status(404).json({ message: "Student account not found." });
-    }
-
-    // Check if this email is already linked to a different registered account
-    const existingEmailOwner = await prisma.user.findFirst({
-      where: {
-        email: emailLower,
-        NOT: { id: user.id },
-      },
-    });
-    if (existingEmailOwner) {
-      return res.status(400).json({
-        message: "This SRM institutional email is already linked to another registered account.",
-      });
-    }
-
-    // Enforce per-user OTP rate limiting
-    const rateCheck = checkUserOtpRateLimit(emailLower || user.regNo);
-    if (!rateCheck.allowed) {
-      return res.status(429).json({ message: rateCheck.message });
-    }
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedToken = crypto.createHash("sha256").update(otp).digest("hex");
-    const tokenExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-    // Save the verified institutional email and the OTP on the student record
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        email: emailLower,
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: tokenExpires,
-      },
-    });
-
-    console.log(`🔑 [Student First-Login OTP] ${user.fullName} (${emailLower}): ${otp}`);
-    const mailResult = await sendResetEmail(emailLower, user.fullName, otp);
-
-    const quotaNotice = mailResult?.reason === "DAILY_LIMIT_REACHED"
-      ? " (Daily email quota reached; please contact the administrator for your setup OTP)."
-      : "";
-
-    return res.status(200).json({
-      message: `A 6-digit OTP has been generated for ${emailLower}.${quotaNotice} Enter it along with your new password to complete setup.`,
-      email: emailLower,
-      ...(mailResult?.success === false ? { setupOtp: otp } : {}),
-    });
-  } catch (error) {
-    console.error("Error in verifyStudentEmail:", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-// ─── Change Password (authenticated) ─────────────────────────────────────────
-// Requires the user to supply their current password and a new one.
-// Must be called with a valid session (protectRoute middleware).
-export const changePassword = async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: "Current password and new password are required." });
-  }
-  if (newPassword.length < 6) {
-    return res.status(400).json({ message: "New password must be at least 6 characters." });
-  }
-  if (currentPassword === newPassword) {
-    return res.status(400).json({ message: "New password must be different from the current password." });
-  }
-
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.user._id } });
-    if (!user || !user.password) {
-      return res.status(400).json({ message: "No password set for this account. Please use the reset flow." });
-    }
-
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Incorrect current password." });
-    }
-
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: hashed },
-    });
-
-    return res.status(200).json({ message: "Password changed successfully." });
-  } catch (error) {
-    console.error("Error in changePassword:", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
   }
 };

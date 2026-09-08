@@ -18,17 +18,6 @@ services:
         sync: false
       - key: CLIENT_URL
         sync: false
-      - key: BREVO_SMTP_HOST
-        value: smtp-relay.brevo.com
-      - key: BREVO_SMTP_PORT
-        value: "587"
-      - key: BREVO_SMTP_USER
-        sync: false
-      - key: BREVO_SMTP_KEY
-        sync: false
-      - key: SENDER_EMAIL
-        sync: false
-      - key: SENDER_NAME
-        value: "SEPS SRM"
       - key: PROJECT_NAME
         value: "SEPS SRM"
+

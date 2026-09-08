@@ -56,10 +56,15 @@ app.use(
     origin: (origin, callback) => {
       // Allow non-browser clients (curl, Postman) and explicitly listed origins
       if (!origin || allowedOrigins.some((o) => o === origin || origin.startsWith(o))) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
+        return callback(null, true);
       }
+      try {
+        const url = new URL(origin);
+        if (url.hostname.endsWith(".vercel.app") || url.hostname === "localhost") {
+          return callback(null, true);
+        }
+      } catch (_) {}
+      callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
