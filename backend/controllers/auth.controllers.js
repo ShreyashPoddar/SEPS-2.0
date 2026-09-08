@@ -56,20 +56,14 @@ export const identifyUser = async (req, res) => {
 
   try {
     const isEmail = rawId.includes("@");
-    const isAdmin = [
-      "admin",
-      "admin123",
-      "sepsadmin",
-      "999999",
-    ].includes(rawId.toLowerCase());
 
     // Format validation
     if (isEmail) {
-      const SRM_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@(srmist\.edu\.in|gmail\.com)$/i;
+      const SRM_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@srmist\.edu\.in$/i;
       if (!SRM_EMAIL_REGEX.test(rawId)) {
         return res.status(400).json({ message: "Invalid email id" });
       }
-    } else if (!isAdmin) {
+    } else {
       // SRM registration number format: RA followed by digits
       const REG_NO_REGEX = /^RA[0-9]{13}$/i;
       if (!REG_NO_REGEX.test(rawId)) {
@@ -78,17 +72,10 @@ export const identifyUser = async (req, res) => {
     }
 
     const searchRegNos = [rawId.toUpperCase(), rawId];
-    if (rawId.toUpperCase().startsWith("RA99999999") || rawId.toUpperCase() === "RA2399999999999") {
-      searchRegNos.push("RA999999999999", "RA9999999999999", "RA2399999999999");
-    }
-
     const searchEmails = [
       rawId.toLowerCase(),
       `${rawId.toLowerCase()}@srmist.edu.in`,
     ];
-    if (isAdmin) {
-      searchEmails.push("sepsadmin@gmail.com", "admin123@srmist.edu.in");
-    }
 
     const user = await prisma.user.findFirst({
       where: {
@@ -145,22 +132,10 @@ export const login = async (req, res) => {
 
   try {
     const searchRegNos = [loginId.toUpperCase(), loginId];
-    if (loginId.toUpperCase().startsWith("RA99999999") || loginId.toUpperCase() === "RA2399999999999") {
-      searchRegNos.push("RA999999999999", "RA9999999999999", "RA2399999999999");
-    }
-
     const searchEmails = [
       loginId.toLowerCase(),
       `${loginId.toLowerCase()}@srmist.edu.in`,
     ];
-    if (
-      loginId.toLowerCase() === "admin" ||
-      loginId.toLowerCase() === "admin123" ||
-      loginId.toLowerCase() === "sepsadmin" ||
-      loginId === "999999"
-    ) {
-      searchEmails.push("sepsadmin@gmail.com", "admin123@srmist.edu.in");
-    }
 
     const user = await prisma.user.findFirst({
       where: {
@@ -185,11 +160,6 @@ export const login = async (req, res) => {
     if (!isPasswordCorrect && user.role === "student" && user.regNo) {
       const candidates = getStudentPasswords(user.fullName, user.regNo);
       if (candidates.includes(password.trim().toLowerCase())) {
-        isPasswordCorrect = true;
-      }
-    }
-    if (!isPasswordCorrect && user.regNo && (user.regNo.startsWith("RA99999999") || user.regNo === "RA2399999999999")) {
-      if (password === "RA999999999999" || password === "RA9999999999999" || password === "RA2399999999999") {
         isPasswordCorrect = true;
       }
     }
