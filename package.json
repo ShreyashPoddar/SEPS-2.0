@@ -2,7 +2,11 @@
   "name": "seps-monorepo",
   "version": "2.0.0",
   "scripts": {
-    "build": "npm --prefix Frontend run build",
+    "build": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix Frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "build:all": "npm --prefix backend run build && npm --prefix Frontend run build",
+    "postinstall": "npm --prefix backend install && npm --prefix backend run build",
     "start": "npm --prefix backend start"
   },
   "dependencies": {
