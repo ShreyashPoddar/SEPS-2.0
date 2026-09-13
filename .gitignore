@@ -36,6 +36,12 @@ backend/sync_*.js
 skills-lock.json
 .agents/
 
+# ─── User Manuals & Documentation Assets ────────────────────────
+SEPS_*Manual*
+SEPS_*User_Manual*
+manual_*.html
+manual_assets/
+
 # ─── OS & editor junk ────────────────────────────────────────────
 .DS_Store
 Thumbs.db
