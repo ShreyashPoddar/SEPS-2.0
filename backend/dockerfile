@@ -1,17 +1,25 @@
-FROM node:22
+FROM node:22-slim
 
-#App dir
+# Install OpenSSL and CA certificates for Prisma
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# App directory
 WORKDIR /backend
 
-#install app dep
+# Copy package definitions and prisma schema first
 COPY package*.json ./
+COPY prisma ./prisma/
 
-#Run npm install
+# Install dependencies
 RUN npm install
 
-#Bundle app source
+# Bundle application source
 COPY . .
 
-EXPOSE 3050
+# Generate Prisma client for the Linux runtime
+RUN npx prisma generate
+
+ENV NODE_ENV=production
+EXPOSE 10000 3050
 
 CMD [ "npm", "start" ]
