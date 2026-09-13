@@ -183,8 +183,10 @@ export const login = async (req, res) => {
       regNo: user.regNo,
       role: user.role,
       department: user.department,
+      phoneNumber: user.phoneNumber || "",
       internshipStatus: user.internshipStatus,
       profilePic: user.profilePic || null,
+      isProfileComplete: user.isProfileComplete,
     });
   } catch (error) {
     console.error("Error in login controller:", error.message);
@@ -214,6 +216,7 @@ export const updateProfile = async (req, res) => {
     const {
       profilePic,
       department,
+      phoneNumber,
       internshipStatus,
       internshipCompany,
       internshipDuration,
@@ -233,7 +236,9 @@ export const updateProfile = async (req, res) => {
 
     const updatedFields = {};
     if (profilePic !== undefined) updatedFields.profilePic = profilePic;
-    if (department !== undefined) updatedFields.department = department;
+    // Institutional field: students cannot alter department themselves
+    if (department !== undefined && req.user.role !== "student") updatedFields.department = department;
+    if (phoneNumber !== undefined) updatedFields.phoneNumber = (phoneNumber || "").trim();
     if (internshipCompany !== undefined) updatedFields.internshipCompany = internshipCompany;
     if (internshipDuration !== undefined) updatedFields.internshipDuration = internshipDuration;
     if (internships !== undefined) updatedFields.internships = internships;
@@ -323,7 +328,8 @@ export const updateProfile = async (req, res) => {
 
     if (req.user.role === "student") {
       const finalCgpa = updatedFields.cgpa !== undefined ? updatedFields.cgpa : req.user.cgpa;
-      const finalDept = updatedFields.department !== undefined ? updatedFields.department : req.user.department;
+      const finalDept = req.user.department; // Institutional data is locked to official registrar record
+      const finalPhone = updatedFields.phoneNumber !== undefined ? updatedFields.phoneNumber : req.user.phoneNumber;
       const finalPic = updatedFields.profilePic !== undefined ? updatedFields.profilePic : req.user.profilePic;
       const finalLinkedin = updatedFields.linkedinUrl !== undefined ? updatedFields.linkedinUrl : req.user.linkedinUrl;
       const finalGithub = updatedFields.githubUrl !== undefined ? updatedFields.githubUrl : req.user.githubUrl;
@@ -343,6 +349,13 @@ export const updateProfile = async (req, res) => {
         CGPA_FORMAT_REGEX.test(finalCgpaStr)
       );
       const isDeptFormatted = Boolean(finalDept && finalDept.trim().length > 0);
+      const cleanPhoneDigits = (finalPhone || "").replace(/\D/g, "");
+      const isPhoneFormatted = Boolean(
+        finalPhone &&
+        cleanPhoneDigits.length >= 10 &&
+        cleanPhoneDigits.length <= 14 &&
+        /^[+]?[\d\s\-()]+$/.test(String(finalPhone).trim())
+      );
       const isPicFormatted = Boolean(finalPic && isValidHttpUrl(finalPic.trim()));
       const isLinkedinFormatted = Boolean(finalLinkedin && LINKEDIN_FORMAT_REGEX.test(finalLinkedin.trim()));
       const isGithubFormatted = Boolean(finalGithub && GITHUB_FORMAT_REGEX.test(finalGithub.trim()));
@@ -355,6 +368,7 @@ export const updateProfile = async (req, res) => {
       const isAllFilled = Boolean(
         isCgpaFormatted &&
         isDeptFormatted &&
+        isPhoneFormatted &&
         isPicFormatted &&
         isLinkedinFormatted &&
         isGithubFormatted &&
@@ -367,6 +381,7 @@ export const updateProfile = async (req, res) => {
           const reasons = [];
           if (!isCgpaFormatted) reasons.push("CGPA must be a valid number between 0.01 and 10.00 (e.g. 9.92)");
           if (!isDeptFormatted) reasons.push("Department / Branch is required");
+          if (!isPhoneFormatted) reasons.push("Phone Number is required (must be a valid 10-digit contact number, e.g. 9876543210 or +91 9876543210)");
           if (!isPicFormatted) reasons.push("Profile Picture must be a valid URL (https://...)");
           if (!isLinkedinFormatted) reasons.push("LinkedIn must be in the format https://www.linkedin.com/in/username");
           if (!isGithubFormatted) reasons.push("GitHub must be in the format https://github.com/username");

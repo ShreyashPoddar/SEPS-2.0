@@ -11,6 +11,7 @@ export const getStudentInfo = async (req, res) => {
         fullName: true,
         email: true,
         regNo: true,
+        phoneNumber: true,
         department: true,
         skills: true,
         resumeUrl: true,

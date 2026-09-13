@@ -90,7 +90,7 @@ app.use(cookieParser());
 // Allows 150 requests per 15 minutes per IP (~10 req/min), plenty for normal dashboard navigation
 const globalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // max 150 requests per 15 min per IP
+  max: process.env.NODE_ENV === "development" ? 10000 : 150, // Relaxed for local development
   standardHeaders: true,
   legacyHeaders: false,
   message: {

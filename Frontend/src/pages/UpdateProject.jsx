@@ -54,7 +54,7 @@ export default function UpdateProject() {
       <div className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-950">Update Capstone Project</h1>
+            <h1 className="text-2xl font-black text-slate-950">Update Major Project</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">Modify project details, domain tags, and eligible streams</p>
           </div>
           <button

@@ -245,6 +245,11 @@ export default function MyTeams() {
             <p>
               <span className="font-semibold">Reg No:</span> {profileData.regNo}
             </p>
+            {profileData.phoneNumber && (
+              <p>
+                <span className="font-semibold">Phone:</span> {profileData.phoneNumber}
+              </p>
+            )}
             <p>
               <span className="font-semibold">CGPA:</span> {profileData.cgpa ?? "N/A"}
             </p>

@@ -18,7 +18,8 @@ import {
   Briefcase,
   GraduationCap,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Phone,
 } from "lucide-react";
 import { getMyApplications, getStudentTickets, cancelTicket, cancelPendingApplication } from "../api";
 import ChangeTicketModal from "./ChangeTicketModal";
@@ -166,7 +167,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                     No Project Applications Submitted Yet
                   </h3>
                   <p className="text-xs text-slate-600 max-w-md mx-auto">
-                    Browse available faculty projects below and assemble a 3-member team to submit your capstone proposal.
+                    Browse available faculty projects below and assemble a 3-member team to submit your major project proposal.
                   </p>
                 </div>
               ) : (
@@ -262,12 +263,22 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                             {members.map((m, idx) => (
                               <div
                                 key={idx}
-                                className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between"
+                                className={`p-3.5 rounded-xl flex flex-col justify-between border ${
+                                  idx === 0
+                                    ? "bg-slate-50 border-cyan-300 shadow-xs"
+                                    : "bg-slate-50 border-slate-200"
+                                }`}
                               >
                                 <div>
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-extrabold uppercase text-slate-500">
-                                      {idx === 0 ? "Leader" : `Teammate ${idx + 1}`}
+                                    <span
+                                      className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                        idx === 0
+                                          ? "bg-cyan-900 text-cyan-100"
+                                          : "text-slate-500"
+                                      }`}
+                                    >
+                                      {idx === 0 ? "👑 Leader" : `Teammate ${idx + 1}`}
                                     </span>
                                     <div className="flex items-center gap-1">
                                       <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
@@ -288,6 +299,23 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                   <p className="text-[11px] font-mono font-medium text-slate-500">
                                     {m.regNo}
                                   </p>
+
+                                  {/* Phone number */}
+                                  {m.phoneNumber && (
+                                    <div className="mt-2 pt-1.5 border-t border-slate-200">
+                                      <a
+                                        href={`tel:${m.phoneNumber}`}
+                                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded transition ${
+                                          idx === 0
+                                            ? "text-emerald-800 bg-emerald-100 hover:bg-emerald-200"
+                                            : "text-slate-700 bg-slate-100 hover:bg-slate-200"
+                                        }`}
+                                      >
+                                        <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>{idx === 0 ? `Leader: ${m.phoneNumber}` : m.phoneNumber}</span>
+                                      </a>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             ))}

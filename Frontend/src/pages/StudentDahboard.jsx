@@ -323,7 +323,7 @@ export default function StudentDashboard() {
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Centralized Capstone Allocation Window
+                  Centralized Major Project Allocation Window
                 </p>
                 <h4 className="text-sm font-extrabold text-slate-950">
                   Global Registration Deadline:{" "}
@@ -370,7 +370,7 @@ export default function StudentDashboard() {
                     {user.departmentRel?.name || user.department || "Dept of ECE"}
                   </h3>
                   <p className="text-xs text-slate-500 font-semibold">
-                    Academic Year 2026-2027 • IV Year Capstone Cohort
+                    Academic Year 2026-2027 • IV Year Major Project Cohort
                   </p>
                 </div>
               </div>
@@ -424,7 +424,7 @@ export default function StudentDashboard() {
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-black text-slate-950 flex items-center gap-2.5">
                   <SlidersHorizontal className="w-6 h-6 text-slate-950" />
-                  <span>Capstone Project Directory</span>
+                  <span>Major Project Directory</span>
                 </h2>
 
                 {/* 🎯 APPLICATION QUOTA BADGE (MAX 2) */}
@@ -680,7 +680,7 @@ export default function StudentDashboard() {
           {loading ? (
             <div className="p-16 bg-white rounded-3xl border-2 border-slate-900 text-center space-y-3">
               <div className="w-10 h-10 border-4 border-slate-900 border-t-cyan-500 rounded-full animate-spin mx-auto" />
-              <p className="text-sm font-bold text-slate-700">Loading capstone project directory...</p>
+              <p className="text-sm font-bold text-slate-700">Loading major project directory...</p>
             </div>
           ) : projects.length === 0 ? (
             /* Empty state when NO projects exist in the portal */
@@ -689,7 +689,7 @@ export default function StudentDashboard() {
                 <FolderOpen className="w-8 h-8" />
               </div>
               <div className="max-w-md mx-auto">
-                <h3 className="text-xl font-black text-slate-950">No Capstone Projects Uploaded Yet</h3>
+                <h3 className="text-xl font-black text-slate-950">No Major Projects Uploaded Yet</h3>
                 <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 leading-relaxed">
                   Faculty guides are currently uploading approved project listings for this semester's allocation cycle. Check back shortly to submit your team application!
                 </p>
@@ -711,7 +711,7 @@ export default function StudentDashboard() {
               <div className="max-w-md mx-auto">
                 <h3 className="text-xl font-black text-slate-950">No Matching Projects Found</h3>
                 <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 leading-relaxed">
-                  We couldn't find any capstone projects matching your search query or active filter tags.
+                  We couldn't find any major projects matching your search query or active filter tags.
                 </p>
               </div>
               <button

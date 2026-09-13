@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getCurrentUser, updateProfile, logoutUser, isStudentProfileComplete } from "../api";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader, Save, AlertCircle, CheckCircle, ExternalLink, ArrowRight } from 'lucide-react';
+import { Loader, Save, AlertCircle, CheckCircle, ExternalLink, ArrowRight, Phone } from 'lucide-react';
 import Navbar from "../components/Navbar";
 
 export default function StudentProfile() {
@@ -74,6 +74,17 @@ export default function StudentProfile() {
     CGPA_FORMAT_REGEX.test(cgpaRaw)
   );
 
+  // 1b. Phone Number: 10 to 14 digits, optional + or country code
+  const phoneRaw = (profile?.phoneNumber || "").trim();
+  const cleanPhoneDigits = phoneRaw.replace(/\D/g, "");
+  const isPhoneEmpty = !phoneRaw;
+  const isPhoneValid = Boolean(
+    !isPhoneEmpty &&
+    cleanPhoneDigits.length >= 10 &&
+    cleanPhoneDigits.length <= 14 &&
+    /^[+]?[\d\s\-()]+$/.test(phoneRaw)
+  );
+
   // 2. Department: Selected from valid SRM branches
   const isDeptValid = Boolean(profile?.department && profile?.department.trim().length > 0);
 
@@ -97,7 +108,7 @@ export default function StudentProfile() {
   const isResumeEmpty = !resumeRaw;
   const isResumeValid = Boolean(!isResumeEmpty && isValidHttpUrl(resumeRaw));
 
-  // 7. Capstone Track & Internship Experience
+  // 7. Major Project Track & Internship Experience
   const isCorporate = profile?.internshipStatus === "internship";
   const companyRaw = (profile?.internshipCompany || "").trim();
   const durationRaw = (profile?.internshipDuration || "").trim();
@@ -109,6 +120,7 @@ export default function StudentProfile() {
   const isAllFieldsFilled = Boolean(
     isCgpaValid &&
     isDeptValid &&
+    isPhoneValid &&
     isPicValid &&
     isLinkedinValid &&
     isGithubValid &&
@@ -122,6 +134,12 @@ export default function StudentProfile() {
     formatIssues.push("CGPA: Required (enter valid CGPA from 0.01 to 10.00)");
   } else if (!isCgpaValid) {
     formatIssues.push("CGPA: Invalid format (must be between 0.01 and 10.00 with max 2 decimals, e.g. 9.92)");
+  }
+
+  if (isPhoneEmpty) {
+    formatIssues.push("Phone Number: Required (enter valid 10-digit mobile number)");
+  } else if (!isPhoneValid) {
+    formatIssues.push("Phone Number: Invalid format (must be a valid 10-digit contact number, e.g. 9876543210 or +91 9876543210)");
   }
 
   if (!isDeptValid) {
@@ -168,12 +186,25 @@ export default function StudentProfile() {
     }
 
     setSaving(true);
+    // Exclude institutional read-only fields so students cannot modify them
     // eslint-disable-next-line no-unused-vars
-    const { role, ...profileData } = profile;
+    const {
+      role,
+      department,
+      section,
+      sectionId,
+      sectionName,
+      facultyAdvisor,
+      facultyAdvisorId,
+      departmentRel,
+      departmentId,
+      ...profileData
+    } = profile;
 
     // Normalize URLs to canonical https:// format
     const normalizedData = {
       ...profileData,
+      phoneNumber: (profile.phoneNumber || "").trim(),
       cgpa: parseFloat(Number(profile.cgpa).toFixed(2)),
       profilePic: normalizeUrl(profile.profilePic),
       linkedinUrl: normalizeUrl(profile.linkedinUrl),
@@ -237,7 +268,7 @@ export default function StudentProfile() {
                 <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">Mandatory</span>
               </h3>
               <p className="text-xs font-medium text-amber-800 mt-1 leading-relaxed">
-                Before accessing the Capstone Project Dashboard, all required profile details below must be completely filled and saved to the database. The <strong>"Save &amp; Proceed to Dashboard"</strong> button will activate once all fields are complete.
+                Before accessing the Major Project Dashboard, all required profile details below must be completely filled and saved to the database. The <strong>"Save &amp; Proceed to Dashboard"</strong> button will activate once all fields are complete.
               </p>
             </div>
           </div>
@@ -352,46 +383,84 @@ export default function StudentProfile() {
                 />
               </div>
 
-              {/* Department / Branch */}
-              <div className="md:col-span-2">
+              {/* Phone Number */}
+              <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                    Department / Branch <span className="text-red-500 font-bold">*</span>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-slate-700" />
+                    <span>Phone Number</span> <span className="text-red-500 font-bold">*</span>
                   </label>
-                  {isDeptValid ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> Selected
+                  {isPhoneValid ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> Valid
+                    </span>
+                  ) : !isPhoneEmpty ? (
+                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
+                      10 digits required
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                       Required
                     </span>
                   )}
                 </div>
-                <select
-                  name="department"
-                  value={profile.department || "Dept of ECE"}
+                <input
+                  type="tel"
+                  name="phoneNumber"
+                  value={profile.phoneNumber ?? ""}
+                  placeholder="e.g. 9876543210 or +91 9876543210"
+                  required
                   onChange={handleChange}
-                  className="w-full mt-1.5 px-4 py-2.5 text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
-                >
-                  <option value="Dept of ECE">Dept of ECE (Electronics &amp; Communication)</option>
-                  <option value="Dept of CSE">Dept of CSE (Computer Science)</option>
-                  <option value="Dept of IT">Dept of IT (Information Technology)</option>
-                  <option value="Dept of Mechanical">Dept of Mechanical Engineering</option>
-                  <option value="Dept of Biomedical">Dept of Biomedical Engineering</option>
-                  <option value="Dept of EEE">Dept of EEE (Electrical &amp; Electronics)</option>
-                </select>
+                  className="w-full mt-1.5 px-4 py-2.5 text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-black transition font-semibold text-sm"
+                />
               </div>
 
-              {/* Internship Experience & Capstone Track */}
+              {/* Department & Specialization (Official Institutional Allocation - Locked) */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <span>🏛️</span>
+                    <span>Official Department &amp; Academic Specialization</span>
+                    <span className="text-[10px] text-slate-500 font-semibold">(Institutional Allocation)</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3 text-blue-600" /> Officially Verified
+                  </span>
+                </div>
+                <div className="relative mt-1.5">
+                  <input
+                    type="text"
+                    name="department"
+                    value={
+                      profile.department === "Dept of ECE"
+                        ? "Dept of ECE (Core - Electronics & Communication)"
+                        : (profile.departmentRel?.name || profile.department || "Dept of ECE")
+                    }
+                    disabled
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-800 font-bold text-sm cursor-not-allowed select-none pr-32"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                    <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
+                      Sec {profile.section?.name || profile.sectionName || "A"}
+                    </span>
+                    <span className="font-bold text-slate-600">🔒 Locked</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                  Your department, specialization, and section are centrally locked from official university records and cannot be self-modified.
+                </p>
+              </div>
+
+              {/* Internship Experience & Major Project Track */}
               <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-amber-50/40 border-2 border-slate-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                      <span>🏢</span> Capstone Track &amp; Internship Status <span className="text-red-500 font-bold">*</span>
+                      <span>🏢</span> Major Project Track &amp; Internship Status <span className="text-red-500 font-bold">*</span>
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Select whether you are working on an on-campus capstone or enrolled in a corporate internship.
+                      Select whether you are working on an on-campus major project or enrolled in a corporate internship.
                     </p>
                   </div>
                 </div>

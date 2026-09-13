@@ -302,7 +302,15 @@ export const isStudentProfileComplete = (user) => {
     ? Boolean(user.internshipCompany && user.internshipCompany.trim().length >= 2 && user.internshipDuration && user.internshipDuration.trim().length >= 2)
     : true;
 
-  return hasCgpa && hasDept && hasPic && hasLinkedin && hasGithub && hasResume && hasInternship;
+  const cleanPhone = (user.phoneNumber || "").replace(/\D/g, "");
+  const hasPhone = Boolean(
+    user.phoneNumber &&
+    cleanPhone.length >= 10 &&
+    cleanPhone.length <= 14 &&
+    /^[+]?[\d\s\-()]+$/.test(String(user.phoneNumber).trim())
+  );
+
+  return hasCgpa && hasDept && hasPhone && hasPic && hasLinkedin && hasGithub && hasResume && hasInternship;
 };
 
 export const updateProfile = (data) =>
@@ -591,7 +599,7 @@ export const getNotifications = () =>
         {
           _id: "n1",
           title: "Global Deadline Reminder",
-          message: "Final capstone project proposals must be submitted before the department deadline.",
+          message: "Final major project proposals must be submitted before the department deadline.",
           type: "info",
           isRead: false,
           createdAt: new Date().toISOString(),

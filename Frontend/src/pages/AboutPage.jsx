@@ -38,7 +38,7 @@ export default function AboutPage() {
     },
     {
       icon: BookOpen,
-      title: "Faculty Research & Capstone Proposals",
+      title: "Faculty Research & Major Project Proposals",
       desc: "Faculty guides publish specialized research initiatives, laboratory prerequisites, and team vacancies directly on the central portal for students to browse and apply."
     },
     {
@@ -82,7 +82,7 @@ export default function AboutPage() {
     {
       step: "04",
       title: "Faculty Approval & Execution",
-      desc: "Faculty advisors evaluate applicant teams and approve the project, locking in the allocation for capstone reviews and final grading."
+      desc: "Faculty advisors evaluate applicant teams and approve the project, locking in the allocation for major project reviews and final grading."
     }
   ];
 
@@ -197,7 +197,7 @@ export default function AboutPage() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-3xl sm:text-5xl font-extrabold text-slate-950 tracking-tight leading-tight"
           >
-            Empowering Collaborative Engineering & Capstone Excellence.
+            Empowering Collaborative Engineering & Major Project Excellence.
           </motion.h1>
 
           <motion.p
@@ -248,7 +248,7 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* 🔄 The 4-Step Capstone Workflow */}
+        {/* 🔄 The 4-Step Major Project Workflow */}
         <div className="p-8 sm:p-10 rounded-3xl bg-white/75 backdrop-blur-xl border-2 border-black shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
           <div className="text-center max-w-2xl mx-auto mb-10">
             <span className="text-xs font-extrabold uppercase tracking-wider text-black bg-slate-100 border border-black px-3 py-1 rounded-full">

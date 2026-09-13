@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Award,
+  Phone,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { parseStreams } from "../utils/streamUtils";
@@ -264,11 +265,22 @@ export default function TeacherApplications() {
                       {app.members.map((member, idx) => (
                         <div
                           key={member._id || idx}
-                          className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between"
+                          className={`p-3.5 rounded-2xl flex flex-col justify-between border ${
+                            idx === 0
+                              ? "bg-slate-50 border-cyan-300 shadow-sm"
+                              : "bg-slate-50 border-slate-200"
+                          }`}
                         >
                           <div>
                             <div className="flex items-center justify-between gap-1 mb-1">
-                              <p className="font-extrabold text-xs text-slate-900">{member.name}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-extrabold text-xs text-slate-900">{member.name}</p>
+                                {idx === 0 && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 bg-cyan-900 text-cyan-100 rounded">
+                                    👑 Leader
+                                  </span>
+                                )}
+                              </div>
                               <span
                                 className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
                                   member.status === "approved"
@@ -285,6 +297,38 @@ export default function TeacherApplications() {
                             <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
                               {member.department || "Dept of ECE"}
                             </p>
+
+                            {/* Phone number display */}
+                            {idx === 0 ? (
+                              <div className="mt-2 pt-2 border-t border-slate-200">
+                                {member.phoneNumber ? (
+                                  <a
+                                    href={`tel:${member.phoneNumber}`}
+                                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition shadow-xs"
+                                    title="Call Team Leader"
+                                  >
+                                    <Phone className="w-3 h-3 text-emerald-700 shrink-0" />
+                                    <span>Leader Phone: {member.phoneNumber}</span>
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                    <Phone className="w-2.5 h-2.5 text-slate-400" />
+                                    <span>No phone provided</span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : member.phoneNumber ? (
+                              <div className="mt-2 pt-2 border-t border-slate-200">
+                                <a
+                                  href={`tel:${member.phoneNumber}`}
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 px-2 py-0.5 rounded transition"
+                                  title="Call Member"
+                                >
+                                  <Phone className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                  <span>{member.phoneNumber}</span>
+                                </a>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       ))}

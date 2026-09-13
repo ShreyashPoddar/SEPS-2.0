@@ -202,7 +202,7 @@ export default function ChangeTicketModal({
                 Raise Team Modification Ticket
               </h2>
               <p className="text-xs text-slate-300 mt-0.5 font-medium">
-                Project: <strong>{application?.projectTitle || "Capstone Project"}</strong>
+                Project: <strong>{application?.projectTitle || "Major Project"}</strong>
               </p>
             </div>
             <button

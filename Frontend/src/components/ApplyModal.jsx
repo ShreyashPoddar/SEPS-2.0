@@ -16,7 +16,8 @@ import {
   Info,
   UserCheck,
   Trash2,
-  Filter
+  Filter,
+  Phone,
 } from "lucide-react";
 import { searchStudents, applyToProject } from "../api";
 
@@ -194,7 +195,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
 
     if (crossBranchInfo.hasCrossBranch && !acknowledgedCrossBranch) {
       toast.error(
-        "Please acknowledge the cross-branch capstone registration warning."
+        "Please acknowledge the cross-branch major project registration warning."
       );
       return;
     }
@@ -304,6 +305,12 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                   <p className="text-xs text-slate-600 font-medium">
                     Reg No: <span className="font-mono font-bold text-slate-900">{leader.regNo}</span> • {leaderDept}
                   </p>
+                  {leader.phoneNumber && (
+                    <p className="text-xs text-slate-600 font-medium flex items-center gap-1.5 mt-0.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Phone: <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">{leader.phoneNumber}</span></span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -418,7 +425,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                     className="mt-0.5 w-4 h-4 rounded text-slate-950 focus:ring-slate-900 border-slate-400 accent-black cursor-pointer"
                   />
                   <span className="text-xs font-bold text-amber-950">
-                    I acknowledge that my team consists of students across different branches ({crossBranchInfo.differingMembers.map(m => m.dept).join(", ")}) and satisfies inter-disciplinary capstone requisites.
+                    I acknowledge that my team consists of students across different branches ({crossBranchInfo.differingMembers.map(m => m.dept).join(", ")}) and satisfies inter-disciplinary major project requisites.
                   </span>
                 </label>
               </motion.div>

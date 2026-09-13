@@ -301,7 +301,7 @@ export default function TeacherDashboard() {
               </div>
               <div>
                 <h2 className="text-sm font-black text-slate-950 uppercase tracking-wider">
-                  Central Capstone Deadline
+                  Central Major Project Deadline
                 </h2>
                 <p className="text-xs text-slate-600 font-medium">
                   Final date for student team formation and application submissions
@@ -346,10 +346,10 @@ export default function TeacherDashboard() {
               </div>
               <div className="text-left">
                 <h2 className="text-lg sm:text-xl font-black text-slate-950">
-                  Upload a New Capstone Project
+                  Upload a New Major Project
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Propose capstone topics with eligible streams for prospective student teams
+                  Propose major project topics with eligible streams for prospective student teams
                 </p>
               </div>
             </div>
@@ -522,7 +522,7 @@ export default function TeacherDashboard() {
                       ) : (
                         <>
                           <Plus className="w-4 h-4 text-cyan-400" />
-                          <span>Upload Capstone Project</span>
+                          <span>Upload Major Project</span>
                         </>
                       )}
                     </button>
@@ -542,7 +542,7 @@ export default function TeacherDashboard() {
                 <span>Your Uploaded Projects</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Manage your proposed capstone projects and review submitted team applications
+                Manage your proposed major projects and review submitted team applications
               </p>
             </div>
 
@@ -561,7 +561,7 @@ export default function TeacherDashboard() {
               <div className="max-w-md mx-auto">
                 <h3 className="text-xl font-black text-slate-950">No Projects Uploaded Yet</h3>
                 <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 leading-relaxed">
-                  Start by adding your first project above. You can propose up to 2 capstone projects for this semester.
+                  Start by adding your first project above. You can propose up to 2 major projects for this semester.
                 </p>
               </div>
               <button

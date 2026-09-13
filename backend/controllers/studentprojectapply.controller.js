@@ -29,7 +29,7 @@ export const applyToProject = async (req, res) => {
     });
     if (leaderApprovedTeam) {
       return res.status(400).json({
-        message: "You are already allocated to an approved capstone project and cannot apply for additional projects.",
+        message: "You are already allocated to an approved major project and cannot apply for additional projects.",
       });
     }
 
@@ -102,7 +102,7 @@ export const applyToProject = async (req, res) => {
         });
         if (memberApproved) {
           return res.status(400).json({
-            message: `Student ${memberUser.fullName} (${memberUser.regNo || "N/A"}) is already allocated to an approved capstone project.`,
+            message: `Student ${memberUser.fullName} (${memberUser.regNo || "N/A"}) is already allocated to an approved major project.`,
           });
         }
 
@@ -183,21 +183,37 @@ export const getPendingInvitations = async (req, res) => {
     const invitations = await prisma.studentProjectApply.findMany({
       where: { members: { some: { studentId, status: "pending" } } },
       include: {
-        members: memberOrder,
+        members: {
+          ...memberOrder,
+          include: {
+            student: {
+              select: {
+                phoneNumber: true,
+                email: true,
+                department: true,
+                regNo: true,
+              },
+            },
+          },
+        },
         project: { select: { projectTitle: true, facultyName: true } },
       },
     });
 
     const formattedInvitations = invitations.map((app) => {
       const member = app.members.find((m) => m.studentId === studentId);
-      const leader = app.members[0];
+      const leader = app.members.find((m) => m.status === "approved") || app.members[0];
 
       return {
         applicationId: app.id,
-        memberId: member.id,
-        projectTitle: app.project.projectTitle,
-        facultyName: app.project.facultyName,
-        leaderName: leader.name,
+        memberId: member?.id,
+        projectTitle: app.project?.projectTitle,
+        facultyName: app.project?.facultyName,
+        leaderName: leader?.name,
+        leaderRegNo: leader?.regNo,
+        leaderDept: leader?.department || leader?.student?.department || "Dept of ECE",
+        leaderPhone: leader?.student?.phoneNumber || "",
+        leaderEmail: leader?.student?.email || "",
       };
     });
 
@@ -238,7 +254,7 @@ export const respondToInvitation = async (req, res) => {
       });
       if (memberApproved) {
         return res.status(400).json({
-          message: "You are already allocated to an approved capstone project and cannot accept this invitation.",
+          message: "You are already allocated to an approved major project and cannot accept this invitation.",
         });
       }
 
@@ -314,7 +330,18 @@ export const getApplicationsForProject = async (req, res) => {
       include: {
         members: {
           ...memberOrder,
-          include: { student: { select: { fullName: true, email: true, regNo: true, department: true, internshipStatus: true } } },
+          include: {
+            student: {
+              select: {
+                fullName: true,
+                email: true,
+                regNo: true,
+                department: true,
+                internshipStatus: true,
+                phoneNumber: true,
+              },
+            },
+          },
         },
       },
       // First-come, first-served: within the same priority, applications submitted first are ranked first
@@ -327,8 +354,10 @@ export const getApplicationsForProject = async (req, res) => {
       app.queueRank = index + 1;
       app.isFirstComePriority = index === 0;
 
-      app.members.forEach((m) => {
+      app.members.forEach((m, idx) => {
         m._id = m.id;
+        m.isLeader = idx === 0;
+        m.phoneNumber = m.student?.phoneNumber || "";
         m.studentId = { _id: m.studentId, ...m.student };
       });
 
@@ -389,7 +418,7 @@ export const getMyApplications = async (req, res) => {
         project: { select: { id: true, projectTitle: true, facultyName: true, domain: true, description: true } },
         members: {
           ...memberOrder,
-          include: { student: { select: { department: true, internshipStatus: true } } },
+          include: { student: { select: { department: true, internshipStatus: true, phoneNumber: true } } },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -398,16 +427,18 @@ export const getMyApplications = async (req, res) => {
     const formatted = applications.map((app) => ({
       _id: app.id,
       projectId: app.project?.id,
-      projectTitle: app.project?.projectTitle || "Capstone Project",
+      projectTitle: app.project?.projectTitle || "Major Project",
       facultyName: app.project?.facultyName || "Faculty Advisor",
       priority: app.priority,
       status: app.status,
       cohortTrack: app.cohortTrack || "regular",
       hasCrossBranch: app.hasCrossBranch || false,
-      members: app.members.map((m) => ({
+      members: app.members.map((m, idx) => ({
         studentId: m.studentId,
+        isLeader: idx === 0,
         name: m.name,
         regNo: m.regNo,
+        phoneNumber: m.student?.phoneNumber || "",
         department: m.department || m.student?.department || "Dept of ECE",
         internshipStatus: m.internshipStatus || m.student?.internshipStatus || "regular",
         status: m.status,
@@ -425,17 +456,19 @@ export const getMyApplications = async (req, res) => {
         project: { select: { id: true, projectTitle: true, facultyName: true, domain: true, description: true } },
         members: {
           ...memberOrder,
-          include: { student: { select: { department: true, internshipStatus: true } } },
+          include: { student: { select: { department: true, internshipStatus: true, phoneNumber: true } } },
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
     const formattedTeams = teams.map((team) => {
-      const teamMembers = team.members.map((m) => ({
+      const teamMembers = team.members.map((m, idx) => ({
         studentId: m.studentId,
+        isLeader: idx === 0,
         name: m.name,
         regNo: m.regNo,
+        phoneNumber: m.student?.phoneNumber || "",
         department: m.student?.department || "Dept of ECE",
         internshipStatus: m.student?.internshipStatus || "regular",
         status: "approved",
@@ -448,7 +481,7 @@ export const getMyApplications = async (req, res) => {
         _id: team.id,
         teamId: team.id,
         projectId: team.project?.id,
-        projectTitle: team.project?.projectTitle || "Capstone Project",
+        projectTitle: team.project?.projectTitle || "Major Project",
         facultyName: team.facultyName || team.project?.facultyName || "Faculty Advisor",
         priority: 1,
         status: "approved",
@@ -575,7 +608,7 @@ export const raiseTicket = async (req, res) => {
         applicationId: teamId ? null : applicationId,
         teamId: teamId || null,
         studentId,
-        projectTitle: projectTitle || project?.projectTitle || "Capstone Project",
+        projectTitle: projectTitle || project?.projectTitle || "Major Project",
         facultyName: facultyName || project?.facultyName || "Faculty Guide",
         targetMember: effectiveTargetMember,
         changeType,
@@ -758,7 +791,7 @@ export const cancelApplication = async (req, res) => {
           data: {
             userId: m.studentId,
             title: "Project Application Cancelled",
-            message: `The application for project "${application.project?.projectTitle || "Capstone Project"}" was closed/cancelled by ${req.user.fullName}.`,
+            message: `The application for project "${application.project?.projectTitle || "Major Project"}" was closed/cancelled by ${req.user.fullName}.`,
             type: "info",
           },
         });
@@ -766,7 +799,7 @@ export const cancelApplication = async (req, res) => {
     }
 
     res.status(200).json({
-      message: `Application for "${application.project?.projectTitle || "Capstone Project"}" was successfully cancelled.`,
+      message: `Application for "${application.project?.projectTitle || "Major Project"}" was successfully cancelled.`,
     });
   } catch (error) {
     console.error("Cancel application error:", error);

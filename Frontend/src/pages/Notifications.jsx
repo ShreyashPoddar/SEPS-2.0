@@ -20,6 +20,7 @@ import {
   XCircle,
   Info,
   Trash2,
+  Phone,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 
@@ -147,21 +148,64 @@ export default function Notifications() {
               {invitations.map((invite) => (
                 <div
                   key={invite.applicationId}
-                  className="bg-white border border-slate-200 rounded-xl shadow-lg p-4 flex flex-wrap items-center justify-between gap-4 transition hover:shadow-cyan-100 hover:border-cyan-300"
+                  className="bg-white border-2 border-slate-200 rounded-2xl shadow-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-5 transition hover:shadow-cyan-100 hover:border-cyan-400"
                 >
-                  <div className="flex-grow">
-                    <p className="text-gray-700">
-                      <span className="font-bold">{invite.leaderName}</span> has
-                      invited you to join a group for the project:
-                    </p>
-                    <p className="text-cyan-700 font-semibold">
-                      {invite.projectTitle}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Faculty: {invite.facultyName}
-                    </p>
+                  <div className="flex-grow space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300 text-[10px] font-black uppercase tracking-wider">
+                        👑 Team Leader Request
+                      </span>
+                      {invite.leaderDept && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                          {invite.leaderDept}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-slate-800 text-sm font-medium">
+                        <strong className="font-extrabold text-slate-950 text-base">{invite.leaderName}</strong>{" "}
+                        {invite.leaderRegNo && (
+                          <span className="font-mono text-xs text-slate-500 font-semibold">
+                            ({invite.leaderRegNo})
+                          </span>
+                        )}{" "}
+                        has invited you to join their project team:
+                      </p>
+                      <h4 className="text-base sm:text-lg font-black text-cyan-800 mt-0.5">
+                        {invite.projectTitle}
+                      </h4>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                      {invite.leaderPhone ? (
+                        <a
+                          href={`tel:${invite.leaderPhone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-300 text-xs font-extrabold hover:bg-emerald-100 transition shadow-sm"
+                          title="Call or message team leader"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Leader Phone: {invite.leaderPhone}</span>
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-xs font-semibold">
+                          <Phone className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Leader Phone: Not provided</span>
+                        </span>
+                      )}
+
+                      <span className="text-xs text-slate-500 font-medium">
+                        • Faculty Guide: <strong className="text-slate-800">{invite.facultyName}</strong>
+                      </span>
+                      {invite.leaderEmail && (
+                        <span className="text-xs text-slate-500 font-medium hidden sm:inline">
+                          • {invite.leaderEmail}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-3 flex-shrink-0">
+
+                  <div className="flex sm:flex-row md:flex-col gap-2.5 flex-shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                     <button
                       onClick={() =>
                         handleInvitationResponse(
@@ -170,9 +214,9 @@ export default function Notifications() {
                           "approved"
                         )
                       }
-                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-semibold transition"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-xs shadow-sm transition"
                     >
-                      <Check size={16} /> Accept
+                      <Check size={16} /> Accept Invitation
                     </button>
                     <button
                       onClick={() =>
@@ -182,7 +226,7 @@ export default function Notifications() {
                           "rejected"
                         )
                       }
-                      className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-semibold transition"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-5 py-2.5 rounded-xl font-bold text-xs transition"
                     >
                       <X size={16} /> Decline
                     </button>

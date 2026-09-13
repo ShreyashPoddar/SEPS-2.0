@@ -16,6 +16,7 @@ model User {
   password               String?
   role                   Role
   department             String              @default("Dept of ECE")
+  phoneNumber            String              @default("")
   internshipStatus       CohortTrack         @default(regular)
   internshipCompany      String              @default("")
   internshipDuration     String              @default("")
