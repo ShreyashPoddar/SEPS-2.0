@@ -31,6 +31,7 @@ backend/test_*.js
 backend/seed_*.js
 backend/reset_*.js
 backend/sync_*.js
+backend/fix_*.js
 
 # ─── Neon / deployment artifacts ─────────────────────────────────
 skills-lock.json

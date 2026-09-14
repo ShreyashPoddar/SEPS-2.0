@@ -3,6 +3,7 @@ import { getCurrentUser, updateProfile, logoutUser, isStudentProfileComplete } f
 import { useNavigate, useLocation } from "react-router-dom";
 import { Loader, Save, AlertCircle, CheckCircle, ExternalLink, ArrowRight, Phone } from 'lucide-react';
 import Navbar from "../components/Navbar";
+import { getStudentDisplayDepartment } from "../utils/departmentUtils";
 
 export default function StudentProfile() {
   const navigate = useNavigate();
@@ -431,11 +432,7 @@ export default function StudentProfile() {
                   <input
                     type="text"
                     name="department"
-                    value={
-                      profile.department === "Dept of ECE"
-                        ? "Dept of ECE (Core - Electronics & Communication)"
-                        : (profile.departmentRel?.name || profile.department || "Dept of ECE")
-                    }
+                    value={getStudentDisplayDepartment(profile)}
                     disabled
                     readOnly
                     className="w-full px-4 py-2.5 bg-slate-100 border-2 border-slate-300 rounded-xl text-slate-800 font-bold text-sm cursor-not-allowed select-none pr-32"

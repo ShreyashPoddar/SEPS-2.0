@@ -35,6 +35,7 @@ import Navbar from "../components/Navbar";
 import ApplyModal from "../components/ApplyModal";
 import TicketTrackerWidget from "../components/TicketTrackerWidget";
 import { parseStreams } from "../utils/streamUtils";
+import { getStudentDisplayDepartment } from "../utils/departmentUtils";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -334,7 +335,7 @@ export default function StudentDashboard() {
 
             {user && (
               <div className="flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full bg-slate-100 border border-slate-300">
-                <span>{user.department || "Dept of ECE"}</span>
+                <span>{getStudentDisplayDepartment(user)}</span>
                 <span>•</span>
                 <span>
                   {user.internshipCompany ? (
@@ -367,7 +368,7 @@ export default function StudentDashboard() {
                     </span>
                   </div>
                   <h3 className="text-lg font-black text-slate-950 mt-0.5">
-                    {user.departmentRel?.name || user.department || "Dept of ECE"}
+                    {getStudentDisplayDepartment(user)}
                   </h3>
                   <p className="text-xs text-slate-500 font-semibold">
                     Academic Year 2026-2027 • IV Year Major Project Cohort
