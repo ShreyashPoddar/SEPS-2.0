@@ -117,7 +117,7 @@ export default function UpdateProject() {
           </div>
 
           {/* Specialization / Stream */}
-          <div>
+          <div className="relative z-40">
             <SpecializationDropdown
               value={projectData.stream}
               onChange={(val) =>

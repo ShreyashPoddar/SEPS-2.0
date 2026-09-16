@@ -17,19 +17,33 @@ export default function SpecializationDropdown({ value = "", onChange, required 
   // Dynamic placement and max-height calculation based on viewport space
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
-      const rect = dropdownRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const spaceBelow = viewportHeight - rect.bottom;
-      const spaceAbove = rect.top;
+      const updatePosition = () => {
+        if (!dropdownRef.current) return;
+        const rect = dropdownRef.current.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
 
-      // If space below is constrained (< 320px) and there's more space above, open upwards!
-      if (spaceBelow < 320 && spaceAbove > spaceBelow) {
-        setPlacement("top");
-        setScrollMaxHeight(Math.max(160, Math.min(260, spaceAbove - 110)));
-      } else {
-        setPlacement("bottom");
-        setScrollMaxHeight(Math.max(160, Math.min(260, spaceBelow - 110)));
-      }
+        // Since this dropdown is positioned near the bottom of the form card,
+        // prefer opening upwards if space below is tight (< 380px) or space above is greater
+        const shouldOpenUp = spaceAbove > 220 && (spaceBelow < 380 || spaceAbove > spaceBelow);
+
+        if (shouldOpenUp) {
+          setPlacement("top");
+          setScrollMaxHeight(Math.max(160, Math.min(280, spaceAbove - 100)));
+        } else {
+          setPlacement("bottom");
+          setScrollMaxHeight(Math.max(160, Math.min(280, spaceBelow - 100)));
+        }
+      };
+
+      updatePosition();
+      window.addEventListener("resize", updatePosition);
+      window.addEventListener("scroll", updatePosition, true);
+      return () => {
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("scroll", updatePosition, true);
+      };
     }
   }, [isOpen]);
 

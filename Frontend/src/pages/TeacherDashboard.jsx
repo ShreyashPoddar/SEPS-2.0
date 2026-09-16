@@ -374,18 +374,14 @@ export default function TeacherDashboard() {
           {isUploadFormVisible && (
             <motion.section
               key="upload-form"
-              initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
-              animate={{
-                height: "auto",
-                opacity: 1,
-                marginTop: "-1rem",
-                marginBottom: "2.5rem",
-                transitionEnd: { overflow: "visible" },
-              }}
-              exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
-              transition={{ duration: 0.4, ease: "easeInOut" }}
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="-mt-4 mb-10 overflow-visible relative z-30"
+              style={{ overflow: "visible" }}
             >
-              <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900">
+              <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900 overflow-visible">
                 <div className="border-b border-slate-200 pb-4 mb-6 flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-black text-slate-950">New Project Submission</h3>
@@ -435,8 +431,8 @@ export default function TeacherDashboard() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="relative z-20">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-30">
+                    <div className="relative z-40">
                       <SpecializationDropdown
                         value={newProject.stream}
                         onChange={(val) =>
