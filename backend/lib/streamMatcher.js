@@ -28,39 +28,60 @@ function mapTokenToSpecializations(raw) {
   if (/^(all|any|open|open to all|all branches|all departments|all specializations|all specialization|\*)$/i.test(t)) {
     return ["All Specializations"];
   }
+
+  // If explicitly "core", map to Core ECE
+  if (t.includes("core") && !t.includes("all")) {
+    return ["Dept of ECE (Core - Electronics & Communication)"];
+  }
+
+  // ECE without "core" (or "ecce" typo) represents ECE with all specialisations -> All Specializations
+  if (
+    /\b(ece|ecce)\b/i.test(t) ||
+    t.includes("all streams") ||
+    t.includes("all specialization") ||
+    t.includes("all specialisations") ||
+    t.includes("any specialization") ||
+    t.includes("any specialisation")
+  ) {
+    return ["All Specializations"];
+  }
+
   const res = [];
-  if (t.includes("data science") || t.includes("053")) res.push("Dept of ECE (Data Science)");
-  if (t.includes("cyber physical") || /\bcps\b/i.test(t) || t.includes("052")) res.push("Dept of ECE (Cyber Physical Systems)");
-  if (t.includes("vlsi") || t.includes("067")) res.push("Dept of ECE (VLSI Design)");
+  if (t.includes("data science") || t.includes("053") || /\b(ds|ece-ds|ece ds)\b/i.test(t)) {
+    res.push("Dept of ECE (Data Science)");
+  }
+  if (t.includes("cyber physical") || /\bcps\b/i.test(t) || t.includes("052")) {
+    res.push("Dept of ECE (Cyber Physical Systems)");
+  }
+  if (t.includes("vlsi") || t.includes("067") || /\bvdt\b/i.test(t)) {
+    res.push("Dept of ECE (VLSI Design)");
+  }
   if (
     t.includes("electronics and computer") ||
     t.includes("elec. comp") ||
     t.includes("comp.engg") ||
-    t.includes("043")
+    t.includes("043") ||
+    /\beke\b/i.test(t)
   ) {
     res.push("Dept of Electronics and Computer Engineering");
   }
-  if (t.includes("integrated") || t.includes("meso") || t.includes("705")) res.push("Dept of ECE (M.Tech Integrated)");
-  if (/\bcse\b/i.test(t) || t.includes("computer science")) res.push("Dept of CSE");
-  if (/\b(it|information technology)\b/i.test(t)) res.push("Dept of IT");
-  if (/\b(mech|mechanical)\b/i.test(t)) res.push("Dept of Mechanical");
-  if (/\b(biomedical|biomed|bme)\b/i.test(t)) res.push("Dept of Biomedical");
-
+  if (t.includes("integrated") || t.includes("meso") || t.includes("705")) {
+    res.push("Dept of ECE (M.Tech Integrated)");
+  }
   if (
-    t.includes("core") ||
     t.includes("electronics & communication") ||
-    t.includes("electronics and communication") ||
-    (/\bece\b/i.test(t) && res.length === 0)
+    t.includes("electronics and communication")
   ) {
     res.push("Dept of ECE (Core - Electronics & Communication)");
   }
+
   return res;
 }
 
 /**
  * Maps any legacy or freeform stream string into canonical dropdown specialization literals.
  * @param {string} rawStream - e.g. "B.Tech ECE, B.Tech ECE with specialization in Data Science"
- * @returns {string} e.g. "Dept of ECE (Core - Electronics & Communication), Dept of ECE (Data Science)"
+ * @returns {string} e.g. "All Specializations"
  */
 export const mapRawStreamToCanonical = (rawStream) => {
   if (!rawStream || typeof rawStream !== "string" || !rawStream.trim()) {
@@ -95,8 +116,8 @@ export const mapRawStreamToCanonical = (rawStream) => {
     }
   }
 
-  // If no specific branch matched, default to "All Specializations"
-  if (matched.size === 0) {
+  // If "All Specializations" matched or no specific branch matched, default to "All Specializations"
+  if (matched.has("All Specializations") || matched.size === 0) {
     return "All Specializations";
   }
 
