@@ -374,16 +374,16 @@ export default function TeacherDashboard() {
           {isUploadFormVisible && (
             <motion.section
               key="upload-form"
-              initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
+              initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
               animate={{
                 height: "auto",
                 opacity: 1,
                 marginTop: "-1rem",
                 marginBottom: "2.5rem",
+                transitionEnd: { overflow: "visible" },
               }}
-              exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
+              exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
               transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="overflow-hidden"
             >
               <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900">
                 <div className="border-b border-slate-200 pb-4 mb-6 flex items-center justify-between">
@@ -436,7 +436,7 @@ export default function TeacherDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
+                    <div className="relative z-20">
                       <SpecializationDropdown
                         value={newProject.stream}
                         onChange={(val) =>

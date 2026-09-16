@@ -10,7 +10,28 @@ export default function SpecializationDropdown({ value = "", onChange, required 
   const [specializations, setSpecializations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [placement, setPlacement] = useState("bottom"); // "bottom" | "top"
+  const [scrollMaxHeight, setScrollMaxHeight] = useState(240);
   const dropdownRef = useRef(null);
+
+  // Dynamic placement and max-height calculation based on viewport space
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // If space below is constrained (< 320px) and there's more space above, open upwards!
+      if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+        setPlacement("top");
+        setScrollMaxHeight(Math.max(160, Math.min(260, spaceAbove - 110)));
+      } else {
+        setPlacement("bottom");
+        setScrollMaxHeight(Math.max(160, Math.min(260, spaceBelow - 110)));
+      }
+    }
+  }, [isOpen]);
 
   // Fetch only existing specializations from the student database
   useEffect(() => {
@@ -97,7 +118,7 @@ export default function SpecializationDropdown({ value = "", onChange, required 
   );
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
+    <div className={`relative w-full ${isOpen ? "z-50" : "z-10"}`} ref={dropdownRef}>
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
           <Layers className="w-3.5 h-3.5 text-cyan-600" />
@@ -180,7 +201,11 @@ export default function SpecializationDropdown({ value = "", onChange, required 
 
       {/* Dropdown Menu Popover */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 bg-white border-2 border-slate-900 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`absolute left-0 right-0 ${
+            placement === "top" ? "bottom-full mb-2 origin-bottom" : "top-full mt-2 origin-top"
+          } bg-white border-2 border-slate-900 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
+        >
           {/* Search box if there are more than 4 specializations */}
           {specializations.length > 4 && (
             <div className="p-2.5 border-b border-slate-100 bg-slate-50/70">
@@ -195,7 +220,14 @@ export default function SpecializationDropdown({ value = "", onChange, required 
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto p-2 space-y-1.5 divide-y divide-slate-100">
+          <div
+            className="overflow-y-auto p-2 space-y-1.5 divide-y divide-slate-100 overscroll-contain"
+            style={{
+              maxHeight: `${scrollMaxHeight}px`,
+              scrollbarWidth: "thin",
+              scrollbarColor: "#94a3b8 #f1f5f9",
+            }}
+          >
             {/* OPTION 1: SELECT ALL SPECIALIZATIONS */}
             <div className="pb-1.5">
               <div
