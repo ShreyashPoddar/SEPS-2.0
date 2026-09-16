@@ -7,9 +7,11 @@
  */
 export const parseStreams = (streamStr) => {
   if (!streamStr || typeof streamStr !== "string") return [];
-  return streamStr
-    .split(/[,/;&|]+/g)
-    .map((s) => s.trim())
+  const placeholder = "__AND__";
+  const safeStr = streamStr.replace(/Electronics\s*&\s*Communication/gi, `Electronics${placeholder}Communication`);
+  return safeStr
+    .split(/[,;/|\n]+/g)
+    .map((s) => s.replace(new RegExp(placeholder, "g"), " & ").trim())
     .filter(Boolean);
 };
 
@@ -63,7 +65,12 @@ export const mapRawStreamToCanonical = (rawStream) => {
     return "All Specializations";
   }
 
-  const segments = s.split(/[,/;&|\n]+/g);
+  const placeholder = "__AND__";
+  const safeStr = s.replace(/Electronics\s*&\s*Communication/gi, `Electronics${placeholder}Communication`);
+  const segments = safeStr
+    .split(/[,;/|\n]+/g)
+    .map((x) => x.replace(new RegExp(placeholder, "g"), " & ").trim())
+    .filter(Boolean);
   const matched = new Set();
 
   for (const seg of segments) {
