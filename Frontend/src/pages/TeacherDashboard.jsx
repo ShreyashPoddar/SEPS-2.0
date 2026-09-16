@@ -27,6 +27,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import SpecializationDropdown from "../components/SpecializationDropdown";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { parseStreams } from "../utils/streamUtils";
@@ -436,42 +437,16 @@ export default function TeacherDashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-black uppercase tracking-wider text-slate-700">
-                          Eligible Stream(s)
-                        </label>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          Comma-separated (e.g. CSE, ECE)
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="e.g., ECE, CSE or Open to All"
+                      <SpecializationDropdown
                         value={newProject.stream}
-                        onChange={(e) =>
+                        onChange={(val) =>
                           setNewProject({
                             ...newProject,
-                            stream: e.target.value,
+                            stream: val,
                           })
                         }
-                        className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
                         required
                       />
-                      {newProject.stream && (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className="text-[11px] text-slate-500 font-bold">
-                            Eligible streams:
-                          </span>
-                          {parseStreams(newProject.stream).map((str, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200"
-                            >
-                              {str}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     <div>

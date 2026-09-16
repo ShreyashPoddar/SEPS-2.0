@@ -1,10 +1,15 @@
 // controllers/projectupload.controller.js
 import prisma from "../lib/db.js";
-import { parseStreams, isStudentEligibleForStream } from "../lib/streamMatcher.js";
+import {
+  parseStreams,
+  isStudentEligibleForStream,
+  mapRawStreamToCanonical,
+} from "../lib/streamMatcher.js";
 
 const withId = (obj) => {
   if (obj) {
     obj._id = obj.id;
+    obj.stream = mapRawStreamToCanonical(obj.stream);
     obj.allowedStreams = parseStreams(obj.stream);
   }
   return obj;
@@ -13,12 +18,13 @@ const withId = (obj) => {
 const createProject = async (req, res) => {
   try {
     const { projectTitle, description, stream, domain } = req.body;
+    const canonicalStream = mapRawStreamToCanonical(stream);
 
     const teacherId = req.user._id;
     const facultyName = req.user.fullName;
 
     const savedProject = await prisma.project.create({
-      data: { projectTitle, description, stream, domain, teacherId, facultyName },
+      data: { projectTitle, description, stream: canonicalStream, domain, teacherId, facultyName },
     });
 
     res.status(201).json(withId(savedProject));
@@ -65,10 +71,21 @@ const getAllProjects = async (req, res) => {
       where: { id: { notIn: excludedIds } },
       orderBy: { createdAt: "desc" },
     });
-    projects.forEach(withId);
+    for (const p of projects) {
+      const canonical = mapRawStreamToCanonical(p.stream);
+      if (p.stream !== canonical) {
+        prisma.project
+          .update({
+            where: { id: p.id },
+            data: { stream: canonical },
+          })
+          .catch(() => {});
+        p.stream = canonical;
+      }
+      withId(p);
+    }
 
     // Filter projects based on student's department/stream eligibility
-    // e.g. "CSE, ECE" allows both CSE and ECE students. "CSE" shows only to CSE students.
     let eligibleProjects = projects;
     if (req.user && req.user.role === "student") {
       eligibleProjects = projects.filter((p) =>
@@ -101,6 +118,16 @@ const getProjectsByTeacher = async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
     projects.forEach((p) => {
+      const canonical = mapRawStreamToCanonical(p.stream);
+      if (p.stream !== canonical) {
+        prisma.project
+          .update({
+            where: { id: p.id },
+            data: { stream: canonical },
+          })
+          .catch(() => {});
+        p.stream = canonical;
+      }
       withId(p);
       p.applicationsCount = p.applications ? p.applications.length : 0;
     });
@@ -116,6 +143,16 @@ const getProjectById = async (req, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.id } });
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
+    }
+    const canonical = mapRawStreamToCanonical(project.stream);
+    if (project.stream !== canonical) {
+      prisma.project
+        .update({
+          where: { id: project.id },
+          data: { stream: canonical },
+        })
+        .catch(() => {});
+      project.stream = canonical;
     }
     res.status(200).json(withId(project));
   } catch (error) {
@@ -143,12 +180,13 @@ const updateProject = async (req, res) => {
     if (await denyIfNotOwner(req, res)) return;
 
     const { projectTitle, description, stream, domain } = req.body;
+    const canonicalStream = mapRawStreamToCanonical(stream);
 
     let updatedProject;
     try {
       updatedProject = await prisma.project.update({
         where: { id: req.params.id },
-        data: { projectTitle, description, stream, domain },
+        data: { projectTitle, description, stream: canonicalStream, domain },
       });
     } catch (e) {
       if (e.code === "P2025") {
@@ -190,6 +228,59 @@ const deleteProject = async (req, res) => {
   }
 };
 
+const getStudentSpecializations = async (req, res) => {
+  try {
+    const students = await prisma.user.findMany({
+      where: { role: "student" },
+      select: {
+        department: true,
+        regNo: true,
+        departmentRel: { select: { name: true, code: true } },
+      },
+    });
+
+    const specializationSet = new Set();
+
+    for (const s of students) {
+      const rawDept = (s.departmentRel?.name || s.department || "").trim();
+      const regNo = (s.regNo || "").trim().toUpperCase();
+      const regCode = regNo.length >= 9 ? regNo.substring(6, 9) : "";
+
+      if (regCode === "053" || rawDept.toLowerCase().includes("data science")) {
+        specializationSet.add("Dept of ECE (Data Science)");
+      } else if (regCode === "052" || rawDept.toLowerCase().includes("cps") || rawDept.toLowerCase().includes("cyber physical")) {
+        specializationSet.add("Dept of ECE (Cyber Physical Systems)");
+      } else if (regCode === "067" || rawDept.toLowerCase().includes("vlsi")) {
+        specializationSet.add("Dept of ECE (VLSI Design)");
+      } else if (regCode === "043" || rawDept.toLowerCase().includes("computer")) {
+        specializationSet.add("Dept of Electronics and Computer Engineering");
+      } else if (regCode === "705" || rawDept.toLowerCase().includes("integrated") || rawDept.toLowerCase().includes("meso")) {
+        specializationSet.add("Dept of ECE (M.Tech Integrated)");
+      } else if (regCode === "004" || rawDept === "Dept of ECE" || rawDept.toLowerCase().includes("core")) {
+        specializationSet.add("Dept of ECE (Core - Electronics & Communication)");
+      } else if (rawDept) {
+        specializationSet.add(rawDept);
+      }
+    }
+
+    // Default institutional specializations if no student records exist in DB yet
+    if (specializationSet.size === 0) {
+      specializationSet.add("Dept of ECE (Core - Electronics & Communication)");
+      specializationSet.add("Dept of ECE (Data Science)");
+      specializationSet.add("Dept of ECE (Cyber Physical Systems)");
+      specializationSet.add("Dept of ECE (VLSI Design)");
+      specializationSet.add("Dept of Electronics and Computer Engineering");
+      specializationSet.add("Dept of ECE (M.Tech Integrated)");
+    }
+
+    const sortedList = Array.from(specializationSet).sort();
+    res.status(200).json(sortedList);
+  } catch (error) {
+    console.error("Error in getStudentSpecializations:", error.message);
+    res.status(500).json({ message: "Error fetching specializations", error: error.message });
+  }
+};
+
 export {
   createProject,
   getAllProjects,
@@ -197,4 +288,5 @@ export {
   getProjectById,
   updateProject,
   deleteProject,
+  getStudentSpecializations,
 };

@@ -1,4 +1,10 @@
 import axios from "axios";
+import { getStudentDisplayDepartment } from "./utils/departmentUtils";
+import {
+  mapRawStreamToCanonical,
+  parseStreams,
+  isStudentEligibleForStream,
+} from "./utils/streamUtils";
 
 // Base API instance
 const API = axios.create({
@@ -7,7 +13,7 @@ const API = axios.create({
         ? import.meta.env.VITE_API_URL.replace(/\/+$/, "")
         : `${import.meta.env.VITE_API_URL.replace(/\/+$/, "")}/api`)
     : import.meta.env.DEV
-    ? "http://localhost:3050/api"
+    ? "http://localhost:10000/api"
     : "/api",
   withCredentials: true,
   // Allow up to 30s for remote TiDB serverless wake-up latency
@@ -26,17 +32,85 @@ const STORAGE_KEY_APPLICATIONS = "seps_applications";
 const STORAGE_KEY_TEAMS = "seps_teams";
 const STORAGE_KEY_TICKETS = "seps_tickets";
 
-const initialProjects = [];
+const initialProjects = [
+  {
+    _id: "p1",
+    projectTitle: "Autonomous Drone Swarm Navigation via Edge AI & ROS2",
+    description: "Developing decentralized swarm coordination algorithms for search and rescue operations using vision-based SLAM and edge neural accelerators.",
+    domain: "Automation and Robotics",
+    stream: "Dept of ECE (Core - Electronics & Communication), Dept of ECE (Cyber Physical Systems)",
+    allowedStreams: ["Dept of ECE (Core - Electronics & Communication)", "Dept of ECE (Cyber Physical Systems)"],
+    facultyName: "Dr. M. Sangeetha",
+    facultyEmail: "sangeetm@srmist.edu.in",
+    vacancies: 2,
+    prerequisites: "ROS2, Python, C++, Linux",
+    createdAt: new Date(Date.now() - 3600000 * 24 * 2).toISOString(),
+  },
+  {
+    _id: "p2",
+    projectTitle: "High-Throughput Neuromorphic Tensor Accelerator on 28nm FD-SOI",
+    description: "Custom digital ASIC design for spiking neural network inference with ultra-low dynamic power consumption and sub-nanosecond latency.",
+    domain: "VLSI Design",
+    stream: "Dept of ECE (VLSI Design)",
+    allowedStreams: ["Dept of ECE (VLSI Design)"],
+    facultyName: "Dr. K. Vadivukkarasi",
+    facultyEmail: "vadivukk@srmist.edu.in",
+    vacancies: 1,
+    prerequisites: "SystemVerilog, Cadence Innovus, Computer Architecture",
+    createdAt: new Date(Date.now() - 3600000 * 24 * 3).toISOString(),
+  },
+  {
+    _id: "p3",
+    projectTitle: "Predictive Analytics on Multi-Sensor Wearable Telemetry for Cardiac Arrest Prevention",
+    description: "End-to-end deep learning pipeline deployed on microcontrollers processing real-time photoplethysmography and ECG streams.",
+    domain: "AI/ML/DL based applications",
+    stream: "Dept of ECE (Data Science), Dept of Biomedical",
+    allowedStreams: ["Dept of ECE (Data Science)", "Dept of Biomedical"],
+    facultyName: "Dr. G. Elavelvis",
+    facultyEmail: "elavelvg@srmist.edu.in",
+    vacancies: 3,
+    prerequisites: "Python, PyTorch, Signal Processing, Biomedical Sensors",
+    createdAt: new Date(Date.now() - 3600000 * 24 * 4).toISOString(),
+  },
+  {
+    _id: "p4",
+    projectTitle: "Sub-6 GHz Massive MIMO Beamforming Architecture for 6G Networks",
+    description: "Investigating hybrid analog-digital beamforming matrices with intelligent reflecting surfaces to mitigate multi-user interference.",
+    domain: "Wireless Communication",
+    stream: "All Specializations",
+    allowedStreams: ["All Specializations"],
+    facultyName: "Dr. S. Ramesh Kumar",
+    facultyEmail: "hodece@srmist.edu.in",
+    vacancies: 2,
+    prerequisites: "MATLAB, Wireless Channel Modeling, Linear Algebra",
+    createdAt: new Date(Date.now() - 3600000 * 24 * 5).toISOString(),
+  },
+  {
+    _id: "p5",
+    projectTitle: "Resilient Cyber-Physical Smart Grid Monitoring over SCADA Protocols",
+    description: "Real-time intrusion detection and synchrophasor data analytics utilizing IEC 61850 protocol emulators and hardware-in-the-loop tests.",
+    domain: "Embedded Systems and IoT",
+    stream: "Dept of ECE (Cyber Physical Systems), Dept of Electronics and Computer Engineering",
+    allowedStreams: ["Dept of ECE (Cyber Physical Systems)", "Dept of Electronics and Computer Engineering"],
+    facultyName: "Dr. M. K. Srilekha",
+    facultyEmail: "srilekhm@srmist.edu.in",
+    vacancies: 2,
+    prerequisites: "Industrial IoT, Modbus, Python, Network Security",
+    createdAt: new Date(Date.now() - 3600000 * 24 * 6).toISOString(),
+  },
+];
 
 const mockStudents = [
-  { _id: "s1", fullName: "Aadyoth Sreeram", regNo: "RA2111003010001", email: "aadyoth@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/aadyoth", githubUrl: "https://github.com/aadyoth", cgpa: 9.4, skills: ["Embedded C", "RTOS", "Verilog"] },
-  { _id: "s2", fullName: "Riyan Kothari", regNo: "RA2111003010002", email: "riyan@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/riyan-kothari", githubUrl: "https://github.com/RiyanKothari", cgpa: 9.2, skills: ["Python", "ROS2", "Robotics"] },
-  { _id: "s3", fullName: "Suhas Manjunath", regNo: "RA2111003010003", email: "suhas@srmist.edu.in", role: "student", department: "Dept of ECE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/suhas", githubUrl: "https://github.com/suhas", cgpa: 9.0, skills: ["IoT", "ESP32", "Edge AI"] },
-  { _id: "s4", fullName: "Priya Sharma", regNo: "RA2111003010004", email: "priya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/priya", githubUrl: "https://github.com/priya", cgpa: 9.3, skills: ["Full Stack", "React", "NodeJS"] },
-  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111003010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "internship", internshipCompany: "Qualcomm India", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/aditya", githubUrl: "https://github.com/aditya", cgpa: 9.5, skills: ["PyTorch", "Deep Learning", "CUDA"] },
-  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111003010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "internship", internshipCompany: "Amazon AWS", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/ananya", githubUrl: "https://github.com/ananya", cgpa: 9.1, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
-  { _id: "s7", fullName: "Karthik Raja", regNo: "RA2111003010007", email: "karthik@srmist.edu.in", role: "student", department: "Dept of Mechanical", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/karthik", githubUrl: "https://github.com/karthik", cgpa: 8.7, skills: ["SolidWorks", "CAD", "Robotics"] },
-  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111003010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/sneha", githubUrl: "https://github.com/sneha", cgpa: 9.2, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
+  { _id: "s1", fullName: "Aadyoth Sreeram", regNo: "RA2111004010001", email: "aadyoth@srmist.edu.in", role: "student", department: "Dept of ECE (Core - Electronics & Communication)", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/aadyoth", githubUrl: "https://github.com/aadyoth", cgpa: 9.4, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Embedded C", "RTOS", "Verilog"] },
+  { _id: "s2", fullName: "Riyan Kothari", regNo: "RA2111053010002", email: "riyan@srmist.edu.in", role: "student", department: "Dept of ECE (Data Science)", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/riyan-kothari", githubUrl: "https://github.com/RiyanKothari", cgpa: 9.2, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Python", "ROS2", "Robotics"] },
+  { _id: "s3", fullName: "Suhas Manjunath", regNo: "RA2111052010003", email: "suhas@srmist.edu.in", role: "student", department: "Dept of ECE (Cyber Physical Systems)", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/suhas", githubUrl: "https://github.com/suhas", cgpa: 9.0, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["IoT", "ESP32", "Edge AI"] },
+  { _id: "s4", fullName: "Priya Sharma", regNo: "RA2111067010004", email: "priya@srmist.edu.in", role: "student", department: "Dept of ECE (VLSI Design)", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/priya", githubUrl: "https://github.com/priya", cgpa: 9.3, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Verilog", "Cadence", "VLSI"] },
+  { _id: "s5", fullName: "Aditya Verma", regNo: "RA2111043010005", email: "aditya@srmist.edu.in", role: "student", department: "Dept of Electronics and Computer Engineering", internshipStatus: "internship", internshipCompany: "Qualcomm India", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/aditya", githubUrl: "https://github.com/aditya", cgpa: 9.5, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["C++", "Computer Architecture", "Linux"] },
+  { _id: "s6", fullName: "Ananya Iyer", regNo: "RA2111705010006", email: "ananya@srmist.edu.in", role: "student", department: "Dept of ECE (M.Tech Integrated)", internshipStatus: "internship", internshipCompany: "Amazon AWS", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/ananya", githubUrl: "https://github.com/ananya", cgpa: 9.1, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Cloud Computing", "Golang", "Kubernetes"] },
+  { _id: "s7", fullName: "Karthik Raja", regNo: "RA2111003010007", email: "karthik@srmist.edu.in", role: "student", department: "Dept of CSE", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/karthik", githubUrl: "https://github.com/karthik", cgpa: 8.7, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Full Stack", "React", "NodeJS"] },
+  { _id: "s8", fullName: "Sneha Reddy", regNo: "RA2111015010008", email: "sneha@srmist.edu.in", role: "student", department: "Dept of Biomedical", internshipStatus: "internship", internshipCompany: "Philips Healthcare", internshipDuration: "6 Months (Jan - Jun 2026)", linkedinUrl: "https://linkedin.com/in/sneha", githubUrl: "https://github.com/sneha", cgpa: 9.2, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Bio-Sensors", "MATLAB", "Signal Processing"] },
+  { _id: "s9", fullName: "Vikram Das", regNo: "RA2111008010009", email: "vikram@srmist.edu.in", role: "student", department: "Dept of IT", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/vikram", githubUrl: "https://github.com/vikram", cgpa: 8.9, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["Java", "Spring Boot", "DevOps"] },
+  { _id: "s10", fullName: "Harish Nair", regNo: "RA2111010010010", email: "harish@srmist.edu.in", role: "student", department: "Dept of Mechanical", internshipStatus: "regular", linkedinUrl: "https://linkedin.com/in/harish", githubUrl: "https://github.com/harish", cgpa: 8.8, phoneNumber: "9876543210", resumeUrl: "https://example.com/resume.pdf", isProfileComplete: true, skills: ["SolidWorks", "ANSYS", "Robotics"] },
 ];
 
 function getStoredUser() {
@@ -63,12 +137,28 @@ function getStoredProjects() {
   const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
   if (raw) {
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let changed = false;
+        const normalized = parsed.map((p) => {
+          const canonical = mapRawStreamToCanonical(p.stream);
+          if (p.stream !== canonical) changed = true;
+          return {
+            ...p,
+            stream: canonical,
+            allowedStreams: parseStreams(canonical),
+          };
+        });
+        if (changed) {
+          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(normalized));
+        }
+        return normalized;
+      }
     } catch {
-      return [];
+      return initialProjects;
     }
   }
-  return [];
+  return initialProjects;
 }
 
 // Wrapper for resilient execution with mock fallback.
@@ -183,8 +273,16 @@ export const loginUser = async (data) => {
         (s) => s.regNo.toLowerCase() === loginKey || s.email.toLowerCase() === loginKey
       );
 
-      const user = matchedMock
-        ? { ...matchedMock, isVerified: true }
+      const stored = getStoredUser();
+      const isExistingStudent =
+        stored &&
+        stored.role === "student" &&
+        (stored.regNo?.toLowerCase() === loginKey || stored.email?.toLowerCase() === loginKey);
+
+      const user = isExistingStudent
+        ? stored
+        : matchedMock
+        ? { ...matchedMock, isVerified: true, isProfileComplete: true }
         : {
             _id: isTeacher ? "t1" : "s1",
             fullName: isTeacher ? "Dr. M. Sangeetha" : (data.email?.split("@")[0] || loginKey.toUpperCase() || "SRM Student"),
@@ -192,12 +290,16 @@ export const loginUser = async (data) => {
             regNo: isTeacher ? undefined : (data.regNo || (loginKey.startsWith("ra") ? loginKey.toUpperCase() : "RA2111003010123")),
             role: isTeacher ? "teacher" : "student",
             isVerified: true,
+            isProfileComplete: true,
+            phoneNumber: "9876543210",
             department: "Dept of ECE",
             internshipStatus: "regular",
             internshipCompany: "",
             domain: isTeacher ? "Robotics and Automation" : "Embedded Systems and IoT",
             experience: isTeacher ? 12 : undefined,
             description: isTeacher ? "Professor & Department Coordinator" : "Final Year B.Tech ECE Student",
+            cgpa: 9.2,
+            resumeUrl: "https://example.com/resume.pdf",
           };
       setStoredUser(user);
       return { message: "Login successful!", user };
@@ -270,47 +372,25 @@ export const getCurrentUser = async () => {
 
 export const isStudentProfileComplete = (user) => {
   if (!user || user.role !== "student") return true;
-  if (!user.isProfileComplete) return false;
 
-  const CGPA_FORMAT_REGEX = /^(?:10(?:\.0{1,2})?|[0-9](?:\.[0-9]{1,2})?)$/;
-  const LINKEDIN_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
-  const GITHUB_FORMAT_REGEX = /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_\-\.%]+(\/.*)?$/i;
-  const isValidHttpUrl = (str) => {
-    if (!str || typeof str !== "string") return false;
-    const trimmed = str.trim();
-    if (!trimmed) return false;
-    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    try {
-      const parsed = new URL(withProto);
-      return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.includes(".");
-    } catch {
-      return false;
-    }
-  };
+  // If the profile is already explicitly completed, never force redirect to profile page
+  if (user.isProfileComplete === true) return true;
+  if (user.isProfileComplete === false) return false;
 
-  const hasCgpa = user.cgpa !== null && user.cgpa !== undefined &&
-    !isNaN(Number(user.cgpa)) && Number(user.cgpa) >= 0.01 && Number(user.cgpa) <= 10.00 &&
-    CGPA_FORMAT_REGEX.test(String(user.cgpa).trim());
-  const hasDept = Boolean(user.department && user.department.trim());
-  const hasPic = Boolean(user.profilePic && isValidHttpUrl(user.profilePic.trim()));
-  const hasLinkedin = Boolean(user.linkedinUrl && LINKEDIN_FORMAT_REGEX.test(user.linkedinUrl.trim()));
-  const hasGithub = Boolean(user.githubUrl && GITHUB_FORMAT_REGEX.test(user.githubUrl.trim()));
-  const hasResume = Boolean(user.resumeUrl && isValidHttpUrl(user.resumeUrl.trim()));
-
-  const isCorporate = user.internshipStatus === "internship";
-  const hasInternship = isCorporate
-    ? Boolean(user.internshipCompany && user.internshipCompany.trim().length >= 2 && user.internshipDuration && user.internshipDuration.trim().length >= 2)
-    : true;
-
-  const cleanPhone = (user.phoneNumber || "").replace(/\D/g, "");
+  // Fallback heuristic if isProfileComplete flag is not explicitly set
+  const hasCgpa =
+    user.cgpa !== null &&
+    user.cgpa !== undefined &&
+    !isNaN(Number(user.cgpa)) &&
+    Number(user.cgpa) > 0;
+  const hasDept = Boolean(user.department && String(user.department).trim());
   const hasPhone = Boolean(
     user.phoneNumber &&
-    cleanPhone.length >= 10 &&
-    cleanPhone.length <= 14 &&
-    /^[+]?[\d\s\-()]+$/.test(String(user.phoneNumber).trim())
+    String(user.phoneNumber).replace(/\D/g, "").length >= 10
   );
+  const hasResume = Boolean(user.resumeUrl && String(user.resumeUrl).trim());
 
-  return hasCgpa && hasDept && hasPhone && hasPic && hasLinkedin && hasGithub && hasResume && hasInternship;
+  return Boolean(hasCgpa && hasDept && hasPhone && hasResume);
 };
 
 export const updateProfile = (data) =>
@@ -339,17 +419,27 @@ export const updateProfile = (data) =>
 export const getAllProjects = () =>
   withFallback(
     () => API.get("/projects"),
-    () => getStoredProjects()
+    () => {
+      const projects = getStoredProjects();
+      const currentUser = getStoredUser();
+      if (currentUser && currentUser.role === "student") {
+        return projects.filter((p) => isStudentEligibleForStream(currentUser, p.stream));
+      }
+      return projects;
+    }
   );
 
 export const createProject = (data) =>
   withFallback(
-    () => API.post("/projects", data),
+    () => API.post("/projects", { ...data, stream: mapRawStreamToCanonical(data.stream) }),
     () => {
       const projects = getStoredProjects();
+      const canonical = mapRawStreamToCanonical(data.stream);
       const newP = {
         _id: "p_" + Date.now(),
         ...data,
+        stream: canonical,
+        allowedStreams: parseStreams(canonical),
         createdAt: new Date().toISOString(),
       };
       projects.unshift(newP);
@@ -368,6 +458,24 @@ export const deleteProject = (id) =>
     }
   );
 
+export const getStudentSpecializations = () =>
+  withFallback(
+    () => API.get("/projects/specializations"),
+    () => {
+      const stored = getStoredUser();
+      const allStudents = [...mockStudents];
+      if (stored && stored.role === "student" && !allStudents.some((s) => s._id === stored._id)) {
+        allStudents.push(stored);
+      }
+      const set = new Set();
+      for (const s of allStudents) {
+        const spec = getStudentDisplayDepartment(s);
+        if (spec) set.add(spec);
+      }
+      return Array.from(set).sort();
+    }
+  );
+
 export const getTeacherProjects = () =>
   withFallback(
     () => API.get("/projects/my-projects"),
@@ -383,9 +491,24 @@ export const getTeacherProjects = () =>
 
 export const updateProject = (id, data) =>
   withFallback(
-    () => API.put(`/projects/${id}`, data),
+    () =>
+      API.put(`/projects/${id}`, {
+        ...data,
+        ...(data.stream ? { stream: mapRawStreamToCanonical(data.stream) } : {}),
+      }),
     () => {
-      const projects = getStoredProjects().map((p) => (p._id === id ? { ...p, ...data } : p));
+      const canonical = data.stream ? mapRawStreamToCanonical(data.stream) : undefined;
+      const projects = getStoredProjects().map((p) =>
+        p._id === id
+          ? {
+              ...p,
+              ...data,
+              ...(canonical
+                ? { stream: canonical, allowedStreams: parseStreams(canonical) }
+                : {}),
+            }
+          : p
+      );
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       return { message: "Project updated", project: data };
     }

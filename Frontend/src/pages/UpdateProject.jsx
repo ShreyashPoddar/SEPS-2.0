@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAllProjects, updateProject } from "../api";
 import { parseStreams } from "../utils/streamUtils";
+import SpecializationDropdown from "../components/SpecializationDropdown";
 
 export default function UpdateProject() {
   const { projectId } = useParams();
@@ -115,40 +116,15 @@ export default function UpdateProject() {
             />
           </div>
 
-          {/* Stream */}
+          {/* Specialization / Stream */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-700">
-                Eligible Stream(s)
-              </label>
-              <span className="text-[11px] text-slate-500 font-medium">
-                Comma-separated (e.g. CSE, ECE)
-              </span>
-            </div>
-            <input
-              type="text"
-              name="stream"
+            <SpecializationDropdown
               value={projectData.stream}
-              onChange={handleChange}
-              placeholder="e.g., ECE, CSE or Open to All"
-              className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
+              onChange={(val) =>
+                setProjectData((prev) => ({ ...prev, stream: val }))
+              }
               required
             />
-            {projectData.stream && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <span className="text-[11px] text-slate-500 font-bold">
-                  Eligible streams:
-                </span>
-                {parseStreams(projectData.stream).map((str, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200"
-                  >
-                    {str}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Domain */}

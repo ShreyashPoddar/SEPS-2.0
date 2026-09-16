@@ -176,17 +176,13 @@ export const login = async (req, res) => {
 
     generateToken(user.id, res);
 
+    const { password: _, ...userData } = user;
     res.status(200).json({
+      ...userData,
       _id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      regNo: user.regNo,
-      role: user.role,
-      department: user.department,
       phoneNumber: user.phoneNumber || "",
-      internshipStatus: user.internshipStatus,
       profilePic: user.profilePic || null,
-      isProfileComplete: user.isProfileComplete,
+      isProfileComplete: user.isProfileComplete ?? false,
     });
   } catch (error) {
     console.error("Error in login controller:", error.message);

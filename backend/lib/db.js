@@ -22,8 +22,7 @@ export const connectDB = async () => {
     await prisma.$connect();
     console.log("✅ TiDB Connected (via Prisma)");
   } catch (err) {
-    console.error("❌ TiDB Connection Error:", err);
-    process.exit(1);
+    console.error("⚠️ TiDB Connection Warning (could not connect on startup):", err.message || err);
   }
 };
 
