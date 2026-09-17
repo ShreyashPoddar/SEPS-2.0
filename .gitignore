@@ -25,6 +25,8 @@ backend/prisma/generated/
 backend/faculty*
 backend/*faculty*
 backend/*IV year*
+backend/*dump*.json
+backend/*raw*.json
 
 # ─── Test / seed scripts (not for production) ────────────────────
 backend/test_*.js

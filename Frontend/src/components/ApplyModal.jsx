@@ -170,19 +170,23 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
     };
   }, [teammates, leaderCohort]);
 
-  // Form validity: Strict 3-member requirement (1 Leader + 2 Teammates)
-  const totalMembersCount = 1 + (teammates[0].student ? 1 : 0) + (teammates[1].student ? 1 : 0);
-  const isFormComplete = Boolean(teammates[0].student && teammates[1].student);
+  // Form validity: 2 or 3 students per team (1 Leader + 1 or 2 Teammates)
+  const selectedTeammates = useMemo(
+    () => teammates.filter((t) => Boolean(t.student)),
+    [teammates]
+  );
+  const totalMembersCount = 1 + selectedTeammates.length;
+  const isFormComplete = totalMembersCount === 2 || totalMembersCount === 3;
   const canSubmit =
     isFormComplete &&
-    totalMembersCount === 3 &&
+    (totalMembersCount === 2 || totalMembersCount === 3) &&
     !cohortConflictInfo.hasConflict &&
     (!crossBranchInfo.hasCrossBranch || acknowledgedCrossBranch) &&
     !isSubmitting;
 
   const handleSubmit = async () => {
-    if (!isFormComplete || totalMembersCount !== 3) {
-      toast.error("Strict Requirement: Exactly 3 team members (Leader + 2 teammates) must be added before applying.");
+    if (totalMembersCount < 2 || totalMembersCount > 3) {
+      toast.error("Requirement: The team must consist of either 2 or 3 members (Leader + 1 or 2 teammates) before applying.");
       return;
     }
 
@@ -216,7 +220,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
           internshipStatus: leaderCohort,
           status: "approved",
         },
-        ...teammates.map((t) => ({
+        ...selectedTeammates.map((t) => ({
           studentId: t.student._id,
           name: t.student.fullName,
           regNo: t.student.regNo,
@@ -260,7 +264,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                   Priority {nextPriority || 1} of 2 Application
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-slate-800 text-slate-200 border border-slate-700">
-                  3-Member Registered Cohort
+                  2 or 3-Member Registered Cohort
                 </span>
                 <span className="text-xs text-amber-300 font-semibold">
                   Max 2 project applications allowed per student
@@ -439,20 +443,20 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                 <div className="flex items-center gap-2">
                   <h3 className="font-extrabold text-slate-950 text-base flex items-center gap-2">
                     <Users className="w-4 h-4 text-slate-900" />
-                    <span>Team Assembly (3 Members Mandatory)</span>
+                    <span>Team Assembly (2 or 3 Members)</span>
                   </h3>
-                  {totalMembersCount === 3 ? (
+                  {totalMembersCount >= 2 ? (
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 3 of 3 Ready
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {totalMembersCount} Members Ready ({totalMembersCount === 2 ? "2-Member Team" : "3-Member Team"})
                     </span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> {totalMembersCount} of 3 Added ({3 - totalMembersCount} needed)
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> 1 of 2–3 Added (Add at least 1 teammate)
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-600 font-medium">
-                  Team Leader is Member 1. Search and add 2 teammates below to complete the 3-member team.
+                  Team Leader is Member 1. Add 1 teammate for a 2-member team, or 2 teammates for a 3-member team.
                 </p>
               </div>
 
@@ -496,7 +500,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                   >
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                        Teammate Slot {slotNum}
+                        Teammate Slot {slotNum} {slotNum === 1 ? (selectedTeammates.length === 0 ? "(Required)" : "") : "(Optional - 3rd Member)"}
                       </span>
                       {student && (
                         <button
@@ -668,7 +672,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4 text-slate-800 shrink-0" />
               <span>
-                Team size: <strong>3 members total</strong> (1 Leader + 2 Teammates). Application invites will be dispatched to all teammates upon submission.
+                Team size: <strong>{totalMembersCount} {totalMembersCount === 1 ? "member" : "members"}</strong> (Leader + {selectedTeammates.length} {selectedTeammates.length === 1 ? "Teammate" : "Teammates"}). Teams can have either 2 or 3 students. Application invites will be dispatched to all invited teammates upon submission.
               </span>
             </div>
             <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 self-start sm:self-auto shrink-0">
@@ -700,15 +704,15 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Submitting Application...</span>
               </>
-            ) : totalMembersCount < 3 ? (
+            ) : totalMembersCount < 2 ? (
               <>
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                <span>Add all 3 members to apply ({totalMembersCount}/3 added)</span>
+                <span>Add at least 1 teammate to apply (2–3 members required)</span>
               </>
             ) : (
               <>
                 <UserCheck className="w-4 h-4" />
-                <span>Confirm & Submit Priority {nextPriority || 1} Application (3 Members)</span>
+                <span>Confirm & Submit Priority {nextPriority || 1} Application ({totalMembersCount} Members)</span>
               </>
             )}
           </motion.button>

@@ -167,7 +167,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                     No Project Applications Submitted Yet
                   </h3>
                   <p className="text-xs text-slate-600 max-w-md mx-auto">
-                    Browse available faculty projects below and assemble a 3-member team to submit your major project proposal.
+                    Browse available faculty projects below and assemble a 2 or 3-member team to submit your major project proposal.
                   </p>
                 </div>
               ) : (

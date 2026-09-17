@@ -183,7 +183,7 @@ export default function TeacherApplications() {
               const confirmedMembers = (app.members || []).filter(
                 (m) => m.status === "approved"
               ).length;
-              const totalMembers = app.members?.length || 3;
+              const totalMembers = app.members?.length || 0;
               const hasP1Block = Boolean(app.blockingPriority1?.hasActiveP1);
 
               return (

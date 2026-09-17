@@ -9,19 +9,42 @@ export const applyToProject = async (req, res) => {
     const applicationType = "group";
     const leader = req.user;
 
-    // Strict 3-member team validation:
-    // Team Leader + 2 invited teammates = exactly 3 students.
+    // Team size validation:
+    // Team Leader + 1 or 2 invited teammates = 2 or 3 students total.
     const isLeaderEntry = (m) =>
       (m.studentId && (m.studentId === leader._id || m.studentId === leader.id)) ||
-      (m.regNo && leader.regNo && m.regNo === leader.regNo);
+      (m.regNo && leader.regNo && m.regNo.toLowerCase() === leader.regNo.toLowerCase());
 
     const otherMembers = (members || []).filter((m) => !isLeaderEntry(m));
 
-    if (otherMembers.length !== 2) {
+    if (otherMembers.length < 1 || otherMembers.length > 2) {
       return res.status(400).json({
         message:
-          "All 3 team members (team leader and 2 teammates) must be added before submitting an application. Individual or incomplete teams are not permitted.",
+          "The team must consist of either 2 or 3 students (team leader and 1 or 2 teammates). Individual applications or teams with more than 3 members are not permitted.",
       });
+    }
+
+    // Ensure distinct teammates in otherMembers
+    const seenRegNos = new Set();
+    const seenMemberIds = new Set();
+    for (const m of otherMembers) {
+      if (m.regNo) {
+        const normReg = m.regNo.trim().toLowerCase();
+        if (seenRegNos.has(normReg)) {
+          return res.status(400).json({
+            message: `Duplicate team member detected: Reg No "${m.regNo}". Each team member must be unique.`,
+          });
+        }
+        seenRegNos.add(normReg);
+      }
+      if (m.studentId) {
+        if (seenMemberIds.has(m.studentId)) {
+          return res.status(400).json({
+            message: "Duplicate team member detected in the application. Each team member must be unique.",
+          });
+        }
+        seenMemberIds.add(m.studentId);
+      }
     }
 
     const leaderApprovedTeam = await prisma.teamMember.findFirst({
@@ -94,6 +117,16 @@ export const applyToProject = async (req, res) => {
         if (!memberUser) {
           return res.status(404).json({
             message: `Student with Reg No "${member.regNo}" not found.`,
+          });
+        }
+
+        if (
+          memberUser.id === leader._id ||
+          memberUser.id === leader.id ||
+          (memberUser.regNo && leader.regNo && memberUser.regNo.toLowerCase() === leader.regNo.toLowerCase())
+        ) {
+          return res.status(400).json({
+            message: "Team leader cannot be added as a teammate.",
           });
         }
 

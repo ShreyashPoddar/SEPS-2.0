@@ -452,7 +452,7 @@ export default function StudentDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Students can apply for up to 2 projects (Priority 1 & 2). Explore and assemble your 3-member team.
+                Students can apply for up to 2 projects (Priority 1 & 2). Explore and assemble your 2 or 3-member team.
               </p>
             </div>
 
