@@ -23,6 +23,7 @@ import {
   Phone,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 const TYPE_STYLES = {
   success: { Icon: CheckCircle2, ring: "border-emerald-300", tint: "bg-emerald-50", ink: "text-emerald-700" },
@@ -115,11 +116,7 @@ export default function Notifications() {
   };
 
   if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <Loader className="w-10 h-10 text-cyan-600 animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen text="Loading Notifications..." />;
   }
 
   return (

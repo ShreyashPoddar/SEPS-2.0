@@ -12,6 +12,7 @@ import {
 import { toast, Toaster } from "react-hot-toast";
 import { Loader, Users, Inbox, X, Plus, Search, FileText } from "lucide-react";
 import Navbar from "../components/Navbar";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function MyTeams() {
   const navigate = useNavigate();
@@ -140,11 +141,7 @@ export default function MyTeams() {
   };
 
   if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <Loader className="w-10 h-10 text-cyan-600 animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen text="Loading Approved Teams..." />;
   }
 
   return (

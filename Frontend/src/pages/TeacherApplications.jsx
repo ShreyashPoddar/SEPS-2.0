@@ -16,6 +16,7 @@ import {
   Calendar,
   Loader2,
   Check,
+  CheckCircle,
   X,
   Inbox,
   Clock,
@@ -26,6 +27,7 @@ import {
   Phone,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import LoadingSpinner from "../components/LoadingSpinner";
 import { parseStreams } from "../utils/streamUtils";
 
 export default function TeacherApplications() {
@@ -88,20 +90,22 @@ export default function TeacherApplications() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-900 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-white animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen text="Loading Project Applications..." />;
   }
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-900 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-800 font-bold">
         No data found for this project.
       </div>
     );
   }
+
+  const isProjectApproved = Boolean(
+    data.project?.isApproved ||
+      (data.project?.approvedTeams && data.project.approvedTeams.length > 0) ||
+      (data.applications && data.applications.some((a) => a.status === "approved"))
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
@@ -134,9 +138,21 @@ export default function TeacherApplications() {
         </div>
 
         <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border-2 border-slate-900 mb-8">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-950 mb-3">
-            {data.project.title}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-950">
+              {data.project.projectTitle || data.project.title}
+            </h2>
+            {isProjectApproved ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border-2 border-emerald-500 shadow-sm">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span>Approved</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300">
+                <span>Pending Allocation</span>
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
             <p>
               <strong className="text-slate-900">Faculty Guide:</strong> {data.project.facultyName}

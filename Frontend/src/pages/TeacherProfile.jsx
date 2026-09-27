@@ -3,6 +3,7 @@ import { getCurrentUser, updateProfile, logoutUser } from "../api";
 import { useNavigate } from "react-router-dom";
 import { Loader, Save, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 import Navbar from "../components/Navbar";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function TeacherProfile() {
   const navigate = useNavigate();
@@ -121,11 +122,7 @@ export default function TeacherProfile() {
   };
 
   if (loading || !profile) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <Loader className="w-10 h-10 text-cyan-600 animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen text="Loading Teacher Profile..." />;
   }
 
   return (
