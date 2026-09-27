@@ -5,22 +5,27 @@ const ALLOWED_EMAILS = [
   "sangeetm@srmist.edu.in",
   "vadivukk@srmist.edu.in",
   "elavelvg@srmist.edu.in",
+  "hodece@srmist.edu.in",
 ];
 
 export const getStatistics = async (req, res) => {
   try {
-    const userEmail = req.user?.email;
-    if (!ALLOWED_EMAILS.includes(userEmail)) {
+    const userEmail = (req.user?.email || "").trim().toLowerCase();
+    if (!ALLOWED_EMAILS.some((e) => e.toLowerCase() === userEmail)) {
       return res.status(403).json({ message: "Access denied" });
     }
 
     const teachers = await prisma.user.findMany({ where: { role: "teacher" } });
     const projects = await prisma.project.findMany();
 
+    const domainCounts = {};
     const teacherIdToProjects = {};
     projects.forEach((p) => {
       if (!teacherIdToProjects[p.teacherId]) teacherIdToProjects[p.teacherId] = [];
       teacherIdToProjects[p.teacherId].push(p.projectTitle);
+
+      const d = p.domain || "General";
+      domainCounts[d] = (domainCounts[d] || 0) + 1;
     });
     const teachersWithProjects = teachers.filter((t) => teacherIdToProjects[t.id]);
     const teachersWithoutProjects = teachers.filter((t) => !teacherIdToProjects[t.id]);
@@ -30,9 +35,6 @@ export const getStatistics = async (req, res) => {
       include: { members: true },
     });
 
-    // Approval deletes the StudentProjectApply rows, so counting only those
-    // reported "Students Who Applied: None" once every team was approved.
-    // Membership of an approved team counts as having applied.
     const approvedTeamMembers = await prisma.teamMember.findMany({
       select: { studentId: true },
     });
@@ -50,11 +52,12 @@ export const getStatistics = async (req, res) => {
       include: { members: true },
     });
     const groupDetails = groupApplications.map((group) => {
-      const project = projects.find((p) => p.id === group.projectId);
-      const teacher = teachers.find((t) => t.id === project?.teacherId);
+      const project = projects.find((p) => p.id === group.projectId || p._id === group.projectId);
+      const teacher = teachers.find((t) => t.id === project?.teacherId || t._id === project?.teacherId);
       return {
-        projectTitle: project?.projectTitle || "Unknown",
-        teacherName: teacher?.fullName || "Unknown",
+        projectTitle: project?.projectTitle || group.projectTitle || "Unknown",
+        domain: project?.domain || "General",
+        teacherName: teacher?.fullName || group.facultyName || "Unknown",
         students: group.members.map((m) => ({ name: m.name, regNo: m.regNo })),
       };
     });
@@ -67,9 +70,6 @@ export const getStatistics = async (req, res) => {
       where: { applicationType: "individual" },
     });
 
-    // Total submitted, not just still-pending: an approved application no longer
-    // exists as a row, so `applications.length` alone read 0 once teams were
-    // approved even though Approved Groups showed 2.
     const applicationCount = applications.length + groupCount + individualCount;
 
     res.json({
@@ -79,6 +79,7 @@ export const getStatistics = async (req, res) => {
       applicationCount,
       groupCount,
       individualCount,
+      domainCounts,
       teachersWithProjects: teachersWithProjects.map((t) => ({
         name: t.fullName,
         email: t.email,

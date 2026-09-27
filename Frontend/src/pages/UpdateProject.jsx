@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getAllProjects, updateProject } from "../api";
 import { parseStreams } from "../utils/streamUtils";
 import SpecializationDropdown from "../components/SpecializationDropdown";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function UpdateProject() {
   const { projectId } = useParams();
@@ -21,7 +22,8 @@ export default function UpdateProject() {
   useEffect(() => {
     getAllProjects()
       .then((res) => {
-        const found = res.data.find((p) => p._id === projectId);
+        const list = Array.isArray(res.data) ? res.data : res.data?.projects || [];
+        const found = list.find((p) => p._id === projectId || p.id === projectId);
         if (found) {
           setProjectData({
             facultyName: found.facultyName || "",
@@ -161,7 +163,14 @@ export default function UpdateProject() {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-slate-950 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-full border-2 border-black shadow-md transition-all active:scale-98 disabled:opacity-50"
             >
-              {loading ? "Saving Changes..." : "Save Project Changes"}
+              {loading ? (
+                <>
+                  <LoadingSpinner size="xs" color="#ffffff" />
+                  <span>Saving Changes...</span>
+                </>
+              ) : (
+                "Save Project Changes"
+              )}
             </button>
           </div>
         </form>

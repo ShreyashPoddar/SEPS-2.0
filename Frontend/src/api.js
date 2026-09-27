@@ -422,10 +422,19 @@ export const getAllProjects = () =>
     () => {
       const projects = getStoredProjects();
       const currentUser = getStoredUser();
+      const teams = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAMS) || "[]");
+      const enriched = projects.map((p) => ({
+        ...p,
+        isApproved: Boolean(
+          p.isApproved ||
+          p._id === "p1" ||
+          teams.some((t) => t.projectId === p._id || t.projectTitle?.includes(p.projectTitle))
+        ),
+      }));
       if (currentUser && currentUser.role === "student") {
-        return projects.filter((p) => isStudentEligibleForStream(currentUser, p.stream));
+        return enriched.filter((p) => isStudentEligibleForStream(currentUser, p.stream));
       }
-      return projects;
+      return enriched;
     }
   );
 
@@ -452,7 +461,7 @@ export const deleteProject = (id) =>
   withFallback(
     () => API.delete(`/projects/${id}`),
     () => {
-      const projects = getStoredProjects().filter((p) => p._id !== id);
+      const projects = getStoredProjects().filter((p) => p._id !== id && p.id !== id);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       return { message: "Project deleted" };
     }
@@ -482,10 +491,19 @@ export const getTeacherProjects = () =>
     () => {
       const u = getStoredUser();
       const projects = getStoredProjects();
+      const teams = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAMS) || "[]");
+      const enriched = projects.map((p) => ({
+        ...p,
+        isApproved: Boolean(
+          p.isApproved ||
+          p._id === "p1" ||
+          teams.some((t) => t.projectId === p._id || t.projectTitle?.includes(p.projectTitle))
+        ),
+      }));
       if (u && u.email) {
-        return projects.filter((p) => p.facultyEmail === u.email || p.facultyName?.includes(u.fullName));
+        return enriched.filter((p) => p.facultyEmail === u.email || p.facultyName?.includes(u.fullName));
       }
-      return projects.slice(0, 3);
+      return enriched.slice(0, 3);
     }
   );
 
@@ -499,7 +517,7 @@ export const updateProject = (id, data) =>
     () => {
       const canonical = data.stream ? mapRawStreamToCanonical(data.stream) : undefined;
       const projects = getStoredProjects().map((p) =>
-        p._id === id
+        p._id === id || p.id === id
           ? {
               ...p,
               ...data,

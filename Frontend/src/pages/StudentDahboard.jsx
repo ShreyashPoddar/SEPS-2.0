@@ -34,6 +34,7 @@ import {
 import Navbar from "../components/Navbar";
 import ApplyModal from "../components/ApplyModal";
 import TicketTrackerWidget from "../components/TicketTrackerWidget";
+import LoadingSpinner from "../components/LoadingSpinner";
 import { parseStreams } from "../utils/streamUtils";
 import { getStudentDisplayDepartment } from "../utils/departmentUtils";
 
@@ -679,9 +680,8 @@ export default function StudentDashboard() {
         {/* 📚 PROJECT CARDS GRID / EMPTY STATES */}
         <div className="mt-8">
           {loading ? (
-            <div className="p-16 bg-white rounded-3xl border-2 border-slate-900 text-center space-y-3">
-              <div className="w-10 h-10 border-4 border-slate-900 border-t-cyan-500 rounded-full animate-spin mx-auto" />
-              <p className="text-sm font-bold text-slate-700">Loading major project directory...</p>
+            <div className="p-16 bg-white rounded-3xl border-2 border-slate-900 text-center flex items-center justify-center">
+              <LoadingSpinner size="lg" text="Loading major project directory..." />
             </div>
           ) : projects.length === 0 ? (
             /* Empty state when NO projects exist in the portal */

@@ -20,7 +20,7 @@ const createProject = async (req, res) => {
     const { projectTitle, description, stream, domain } = req.body;
     const canonicalStream = mapRawStreamToCanonical(stream);
 
-    const teacherId = req.user._id;
+    const teacherId = req.user._id || req.user.id;
     const facultyName = req.user.fullName;
 
     const savedProject = await prisma.project.create({
@@ -37,38 +37,50 @@ const createProject = async (req, res) => {
 const getAllProjects = async (req, res) => {
   try {
     const studentId = req.user._id;
+    const isTeacher = req.user && req.user.role === "teacher";
 
-    const approvedTeams = await prisma.teamApproved.findMany({
-      select: { projectId: true },
-      distinct: ["projectId"],
-    });
-    const approvedProjectIds = approvedTeams.map((t) => t.projectId);
+    let excludedIds = [];
+    if (!isTeacher) {
+      const approvedTeams = await prisma.teamApproved.findMany({
+        select: { projectId: true },
+        distinct: ["projectId"],
+      });
+      const approvedProjectIds = approvedTeams.map((t) => t.projectId);
 
-    const allApplications = await prisma.studentProjectApply.findMany({
-      select: { id: true, projectId: true },
-    });
-    const countByProject = {};
-    allApplications.forEach((a) => {
-      countByProject[a.projectId] = (countByProject[a.projectId] || 0) + 1;
-    });
-    const overAppliedIds = Object.keys(countByProject).filter(
-      (pid) => countByProject[pid] > 2
-    );
+      const allApplications = await prisma.studentProjectApply.findMany({
+        select: { id: true, projectId: true },
+      });
+      const countByProject = {};
+      allApplications.forEach((a) => {
+        countByProject[a.projectId] = (countByProject[a.projectId] || 0) + 1;
+      });
+      const overAppliedIds = Object.keys(countByProject).filter(
+        (pid) => countByProject[pid] > 2
+      );
 
-    const studentMemberships = await prisma.applicationMember.findMany({
-      where: { studentId },
-      select: { application: { select: { projectId: true } } },
-    });
-    const studentAppliedProjectIds = studentMemberships.map(
-      (m) => m.application.projectId
-    );
+      const studentMemberships = await prisma.applicationMember.findMany({
+        where: { studentId },
+        select: { application: { select: { projectId: true } } },
+      });
+      const studentAppliedProjectIds = studentMemberships.map(
+        (m) => m.application.projectId
+      );
 
-    const excludedIds = [
-      ...new Set([...approvedProjectIds, ...overAppliedIds, ...studentAppliedProjectIds]),
-    ];
+      excludedIds = [
+        ...new Set([...approvedProjectIds, ...overAppliedIds, ...studentAppliedProjectIds]),
+      ];
+    }
 
     const projects = await prisma.project.findMany({
-      where: { id: { notIn: excludedIds } },
+      where: isTeacher ? {} : { id: { notIn: excludedIds } },
+      include: {
+        approvedTeams: {
+          select: { id: true, facultyName: true, createdAt: true },
+        },
+        applications: {
+          select: { id: true, status: true, priority: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     for (const p of projects) {
@@ -83,6 +95,11 @@ const getAllProjects = async (req, res) => {
         p.stream = canonical;
       }
       withId(p);
+      p.applicationsCount = p.applications ? p.applications.length : 0;
+      p.isApproved = Boolean(
+        (p.approvedTeams && p.approvedTeams.length > 0) ||
+        (p.applications && p.applications.some((a) => a.status === "approved"))
+      );
     }
 
     // Filter projects based on student's department/stream eligibility
@@ -102,17 +119,20 @@ const getAllProjects = async (req, res) => {
 
 const getProjectsByTeacher = async (req, res) => {
   try {
+    const conditions = [];
+    if (req.user?._id) conditions.push({ teacherId: req.user._id });
+    if (req.user?.id && req.user.id !== req.user._id) conditions.push({ teacherId: req.user.id });
+    if (req.user?.fullName) conditions.push({ facultyName: req.user.fullName });
+    const where = conditions.length > 0 ? { OR: conditions } : {};
+
     const projects = await prisma.project.findMany({
-      where: {
-        OR: [
-          { teacherId: req.user._id },
-          { teacherId: req.user.id },
-          { facultyName: req.user.fullName },
-        ],
-      },
+      where,
       include: {
         applications: {
           select: { id: true, status: true, priority: true },
+        },
+        approvedTeams: {
+          select: { id: true, facultyName: true, createdAt: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -130,6 +150,10 @@ const getProjectsByTeacher = async (req, res) => {
       }
       withId(p);
       p.applicationsCount = p.applications ? p.applications.length : 0;
+      p.isApproved = Boolean(
+        (p.approvedTeams && p.approvedTeams.length > 0) ||
+        (p.applications && p.applications.some((a) => a.status === "approved"))
+      );
     });
     res.status(200).json(projects);
   } catch (error) {
@@ -140,7 +164,17 @@ const getProjectsByTeacher = async (req, res) => {
 
 const getProjectById = async (req, res) => {
   try {
-    const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.id },
+      include: {
+        applications: {
+          select: { id: true, status: true, priority: true },
+        },
+        approvedTeams: {
+          select: { id: true, facultyName: true, createdAt: true },
+        },
+      },
+    });
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -154,7 +188,13 @@ const getProjectById = async (req, res) => {
         .catch(() => {});
       project.stream = canonical;
     }
-    res.status(200).json(withId(project));
+    withId(project);
+    project.applicationsCount = project.applications ? project.applications.length : 0;
+    project.isApproved = Boolean(
+      (project.approvedTeams && project.approvedTeams.length > 0) ||
+      (project.applications && project.applications.some((a) => a.status === "approved"))
+    );
+    res.status(200).json(project);
   } catch (error) {
     console.error("Error in getProjectById:", error.message);
     res.status(500).json({ message: "Error fetching project", error: error.message });
@@ -168,7 +208,12 @@ const denyIfNotOwner = async (req, res) => {
     res.status(404).json({ message: "Project not found" });
     return true;
   }
-  if (req.user.role !== "teacher" || project.teacherId !== req.user._id) {
+  const userId = req.user._id || req.user.id;
+  const isOwner =
+    project.teacherId === userId ||
+    (project.facultyName && req.user.fullName && project.facultyName.trim().toLowerCase() === req.user.fullName.trim().toLowerCase());
+
+  if (req.user.role !== "teacher" || !isOwner) {
     res.status(403).json({ message: "Access denied. You can only modify your own projects." });
     return true;
   }

@@ -25,6 +25,7 @@ import {
   actOnTicket,
 } from "../api";
 import Navbar from "../components/Navbar";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 const CHANGE_LABEL = {
   name_correction: { text: "Name / Reg. No. Correction", Icon: Edit3 },
@@ -158,11 +159,7 @@ export default function TeacherTickets() {
   }, [tickets, activeTab, openTickets, closedTickets, searchQuery]);
 
   if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <Loader className="w-10 h-10 text-cyan-600 animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen text="Loading Student Change Tickets..." />;
   }
 
   const renderTicket = (tck) => {
