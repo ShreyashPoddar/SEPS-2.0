@@ -9,7 +9,7 @@ import {
   searchStudents,
   getStudentInfo, // Assuming search is by RegNo
 } from "../api";
-import { toast, Toaster } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import { Users, Inbox, X, Plus, Search, FileText } from "lucide-react";
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -42,7 +42,9 @@ export default function MyTeams() {
       })
       .catch((err) => {
         console.error("Failed to fetch teams:", err);
-        toast.error("Could not load your approved teams.");
+        showToast.error("Could not load your approved teams. Please check your connection.", {
+          id: "load-teams-error",
+        });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -72,7 +74,7 @@ export default function MyTeams() {
 
   const handleRemoveMember = async (teamId, memberId) => {
     if (window.confirm("Are you sure you want to remove this member?")) {
-      toast.promise(removeTeamMember(teamId, memberId), {
+      showToast.promise(removeTeamMember(teamId, memberId), {
         loading: "Removing member...",
         success: (res) => {
           setMyTeams((prev) =>
@@ -92,7 +94,7 @@ export default function MyTeams() {
       setProfileData(res.data);
       setShowProfileModal(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to load profile");
+      showToast.error(err, { fallback: "Failed to load student profile." });
     } finally {
       setLoadingProfile(false);
     }
@@ -102,17 +104,21 @@ export default function MyTeams() {
     if (!searchRegNo.trim()) return;
     setIsSearching(true);
     try {
-      // Assuming searchStudents can also search by registration number
       const res = await searchStudents(searchRegNo);
       if (res.data.length > 0) {
         setSearchedStudent(res.data[0]);
       } else {
         setSearchedStudent(null);
-        toast.error("Student not found.");
+        showToast.error("Student not found or currently unavailable for team allocation.", {
+          id: "student-search-notfound",
+        });
       }
     } catch (err) {
       setSearchedStudent(null);
-      toast.error(err.response?.data?.message || "Student not found");
+      showToast.error(err, {
+        id: "student-search-err",
+        fallback: "Student not found or search unavailable.",
+      });
     } finally {
       setIsSearching(false);
     }
@@ -121,7 +127,7 @@ export default function MyTeams() {
   const handleAddMember = async () => {
     if (!searchedStudent) return;
     setIsAdding(true);
-    toast
+    showToast
       .promise(addTeamMember(selectedTeam._id, searchedStudent._id), {
         loading: "Adding member...",
         success: (res) => {
@@ -146,7 +152,6 @@ export default function MyTeams() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
       <div className="relative max-w-6xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar user={user} handleLogout={handleLogout} />
 

@@ -7,7 +7,7 @@ import {
   getCurrentUser,
   logoutUser,
 } from "../api";
-import { toast, Toaster } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   ArrowLeft,
   FileText,
@@ -35,6 +35,7 @@ export default function TeacherApplications() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [processingAppId, setProcessingAppId] = useState(null);
 
   useEffect(() => {
     getCurrentUser()
@@ -55,7 +56,9 @@ export default function TeacherApplications() {
       })
       .catch((err) => {
         console.error(err);
-        toast.error("Failed to load applications.");
+        showToast.error("Failed to load applications. Please check your connection.", {
+          id: "load-applications-error",
+        });
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -65,26 +68,36 @@ export default function TeacherApplications() {
   }, [fetchApplications]);
 
   const handleAccept = (applicationId) => {
-    toast.promise(approveApplication(applicationId), {
+    if (processingAppId) return;
+    setProcessingAppId(applicationId);
+    showToast.promise(approveApplication(applicationId), {
       loading: "Approving application...",
       success: () => {
         fetchApplications(); // Refresh the list of applications
+        setProcessingAppId(null);
         return "Application approved successfully!";
       },
-      error: (err) =>
-        err.response?.data?.message || "Failed to approve application.",
+      error: (err) => {
+        setProcessingAppId(null);
+        return err.response?.data?.message || "Failed to approve application.";
+      },
     });
   };
 
   const handleReject = (applicationId) => {
-    toast.promise(rejectApplication(applicationId), {
+    if (processingAppId) return;
+    setProcessingAppId(applicationId);
+    showToast.promise(rejectApplication(applicationId), {
       loading: "Rejecting application...",
       success: () => {
         fetchApplications(); // Refresh the list of applications
+        setProcessingAppId(null);
         return "Application rejected.";
       },
-      error: (err) =>
-        err.response?.data?.message || "Failed to reject application.",
+      error: (err) => {
+        setProcessingAppId(null);
+        return err.response?.data?.message || "Failed to reject application.";
+      },
     });
   };
 
@@ -108,10 +121,6 @@ export default function TeacherApplications() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster
-        position="top-right"
-        toastOptions={{ className: "bg-slate-700 text-white", loading: { icon: <LoadingSpinner size="xs" /> } }}
-      />
       <div className="relative max-w-7xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar
           user={user}
@@ -381,28 +390,35 @@ export default function TeacherApplications() {
                       <div className="flex flex-col sm:flex-row gap-3">
                         <button
                           onClick={() => handleAccept(app._id)}
-                          disabled={hasP1Block}
+                          disabled={hasP1Block || processingAppId === app._id}
                           title={
                             hasP1Block
                               ? `Approval locked: Student ${app.blockingPriority1.memberName} must cancel their Priority 1 project first.`
                               : "Approve this team"
                           }
                           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-full border-2 transition shadow-sm ${
-                            hasP1Block
+                            hasP1Block || processingAppId === app._id
                               ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed"
                               : "bg-slate-950 hover:bg-slate-800 text-white border-black hover:scale-101 active:scale-99"
                           }`}
                         >
-                          <Check className={`w-4 h-4 ${hasP1Block ? "text-slate-400" : "text-emerald-400"}`} />
+                          {processingAppId === app._id ? (
+                            <LoadingSpinner size="xs" />
+                          ) : (
+                            <Check className={`w-4 h-4 ${hasP1Block ? "text-slate-400" : "text-emerald-400"}`} />
+                          )}
                           <span>
                             {hasP1Block
                               ? "Approval Locked (Awaiting Student P1 Manual Closure)"
+                              : processingAppId === app._id
+                              ? "Approving..."
                               : "Approve Team"}
                           </span>
                         </button>
                         <button
                           onClick={() => handleReject(app._id)}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-700 rounded-full border-2 border-red-300 transition"
+                          disabled={processingAppId === app._id}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 rounded-full border-2 border-red-300 transition"
                         >
                           <X className="w-4 h-4" />
                           <span>Decline Application</span>

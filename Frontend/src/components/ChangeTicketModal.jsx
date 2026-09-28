@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   X,
   Ticket,
@@ -58,6 +58,7 @@ export default function ChangeTicketModal({
   // Reason / Justification
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [replacementSearchError, setReplacementSearchError] = useState(null);
 
   const debouncedReplacementQuery = useDebounce(replacementQuery, 250);
 
@@ -71,21 +72,39 @@ export default function ChangeTicketModal({
 
   // Search replacement students
   useEffect(() => {
-    if (!debouncedReplacementQuery || debouncedReplacementQuery.trim().length < 2) {
+    let isCancelled = false;
+    const query = debouncedReplacementQuery?.trim();
+    if (!query || query.length < 2) {
       setReplacementResults([]);
+      setReplacementSearchError(null);
       return;
     }
     setIsSearching(true);
-    searchStudents(debouncedReplacementQuery.trim())
+    setReplacementSearchError(null);
+
+    searchStudents(query)
       .then((res) => {
-        let list = res.data || [];
+        if (isCancelled) return;
+        let list = Array.isArray(res.data) ? res.data : [];
         // Filter out current members
         const currentRegNos = new Set(members.map((m) => m.regNo?.toLowerCase()));
         list = list.filter((s) => !currentRegNos.has(s.regNo?.toLowerCase()));
         setReplacementResults(list);
       })
-      .catch(() => toast.error("Failed to search replacement students"))
-      .finally(() => setIsSearching(false));
+      .catch(() => {
+        if (isCancelled) return;
+        setReplacementResults([]);
+        setReplacementSearchError("Unable to search replacement students at this moment.");
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsSearching(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [debouncedReplacementQuery, members]);
 
   // Validation
@@ -110,28 +129,28 @@ export default function ChangeTicketModal({
     e.preventDefault();
 
     if (!selectedMember && ticketType !== "cancellation") {
-      toast.error("Please select a target team member to modify.");
+      showToast.error("Please select a target team member to modify.");
       return;
     }
 
     if (ticketType === "name_correction") {
       if (!correctedName.trim() || !correctedRegNo.trim()) {
-        toast.error("Please provide the corrected student name and registration number.");
+        showToast.error("Please provide the corrected student name and registration number.");
         return;
       }
     } else if (ticketType === "replacement") {
       if (!replacementStudent) {
-        toast.error("Please select a valid replacement student from the search list.");
+        showToast.error("Please select a valid replacement student from the search list.");
         return;
       }
       if (replacementCohortConflict) {
-        toast.error("Cohort mismatch! The replacement student must belong to the same internship track.");
+        showToast.error("Cohort mismatch! The replacement student must belong to the same internship track.");
         return;
       }
     }
 
     if (!reason.trim()) {
-      toast.error("Please provide a brief justification for the department coordinator.");
+      showToast.error("Please provide a brief justification for the department coordinator.");
       return;
     }
 
@@ -167,11 +186,11 @@ export default function ChangeTicketModal({
 
     try {
       const res = await raiseChangeTicket(payload);
-      toast.success(res.data?.message || "Change ticket filed successfully!");
+      showToast.success(res.data?.message || "Change ticket filed successfully!");
       if (onTicketSubmitted) onTicketSubmitted(res.data?.ticket);
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to submit ticket.");
+      showToast.error(err, { fallback: "Failed to submit ticket. Please check your network connection." });
     } finally {
       setIsSubmitting(false);
     }
@@ -435,13 +454,22 @@ export default function ChangeTicketModal({
                     </div>
 
                     {/* Results dropdown */}
-                    {replacementQuery.length >= 2 && (
+                    {replacementQuery.trim().length >= 2 && (
                       <div className="mt-2 bg-white border-2 border-slate-900 rounded-2xl shadow-xl p-1.5 max-h-48 overflow-y-auto space-y-1">
-                        {replacementResults.length === 0 && !isSearching && (
-                          <div className="p-3 text-center text-xs text-slate-500 font-medium">
-                            No available students found.
+                        {isSearching ? (
+                          <div className="p-3 text-center text-xs text-slate-500 font-medium flex items-center justify-center gap-2">
+                            <LoadingSpinner size="xs" />
+                            <span>Searching students...</span>
                           </div>
-                        )}
+                        ) : replacementSearchError ? (
+                          <div className="p-3 text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl font-medium">
+                            {replacementSearchError}
+                          </div>
+                        ) : replacementResults.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-500 font-medium">
+                            No available students found matching &quot;{replacementQuery}&quot;.
+                          </div>
+                        ) : null}
                         {replacementResults.map((s) => {
                           const isConflict = (s.internshipStatus || "regular") !== cohortTrack;
                           return (

@@ -63,9 +63,34 @@ export const approveApplication = async (req, res) => {
       return res.status(denied.status).json({ message: denied.message });
     }
 
+    // Check if this project is already approved for a team
+    const existingTeamForProject = await prisma.teamApproved.findFirst({
+      where: {
+        projectId: application.project.id,
+        members: { some: {} },
+      },
+      include: { members: true },
+    });
+    if (existingTeamForProject && existingTeamForProject.members.length > 0) {
+      return res.status(400).json({
+        message: `This project has already been allocated to an approved team (${existingTeamForProject.members.map((m) => m.name).join(", ")}).`,
+      });
+    }
+
+    // Check if any student member is already part of an approved team
+    const studentIds = application.members.map((m) => m.studentId);
+    const existingApprovedMember = await prisma.teamMember.findFirst({
+      where: { studentId: { in: studentIds } },
+      include: { team: { include: { project: true } } },
+    });
+    if (existingApprovedMember) {
+      return res.status(400).json({
+        message: `Cannot approve application: Student ${existingApprovedMember.name} (${existingApprovedMember.regNo}) is already part of an approved team for "${existingApprovedMember.team?.project?.projectTitle || "another project"}".`,
+      });
+    }
+
     // REQUIREMENT: If this is a Priority 2 application, verify that NO member has an active Priority 1 project
     if (application.priority === 2) {
-      const studentIds = application.members.map((m) => m.studentId);
       const activeP1 = await prisma.studentProjectApply.findFirst({
         where: {
           id: { not: applicationId },

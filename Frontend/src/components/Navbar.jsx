@@ -52,7 +52,8 @@ export default function Navbar({ user, handleLogout, notificationCount = 0, pend
         {user?.role === 'teacher' && [
           "sangeetm@srmist.edu.in",
           "vadivukk@srmist.edu.in",
-          "elavelvg@srmist.edu.in"
+          "elavelvg@srmist.edu.in",
+          "hodece@srmist.edu.in"
         ].includes(user.email) && (
           <Link 
             to="/teacher/statistics-report"
@@ -70,7 +71,7 @@ export default function Navbar({ user, handleLogout, notificationCount = 0, pend
             <Users className="w-3.5 h-3.5" /> My Teams
           </Link>
         )}
-        {/* Member change tickets awaiting faculty review */}
+        {/* Member change tickets & quota requests */}
         {user?.role === 'teacher' && (
           <Link
             to="/teacher/tickets"
@@ -81,7 +82,7 @@ export default function Navbar({ user, handleLogout, notificationCount = 0, pend
             }`}
           >
             <Ticket className="w-3.5 h-3.5" />
-            <span>Change Tickets</span>
+            <span>Tickets & Quota</span>
             {pendingTicketsCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-white text-amber-950 font-black text-[10px]">
                 {pendingTicketsCount}

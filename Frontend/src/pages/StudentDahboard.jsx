@@ -9,7 +9,7 @@ import {
   getMyApplications,
 } from "../api";
 import { useNavigate } from "react-router-dom";
-import { toast, Toaster } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   BookOpen,
   Send,
@@ -90,7 +90,11 @@ export default function StudentDashboard() {
         const list = Array.isArray(res.data) ? res.data : (res.data?.projects || []);
         setProjects(list);
       })
-      .catch(() => toast.error("Could not load available projects."))
+      .catch(() =>
+        showToast.error("Could not load available projects. Please check your connection.", {
+          id: "load-projects-error",
+        })
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -100,7 +104,7 @@ export default function StudentDashboard() {
         if (res.data?.role !== "student") {
           navigate("/teacher-dashboard");
         } else if (!isStudentProfileComplete(res.data)) {
-          toast.error("Please complete and save your profile before accessing the dashboard.", {
+          showToast.error("Please complete and save your profile before accessing the dashboard.", {
             id: "profile-required-toast",
             duration: 5000,
           });
@@ -115,7 +119,7 @@ export default function StudentDashboard() {
         if (err.response?.status === 401) {
           navigate("/login");
         } else {
-          toast.error("Session verification delayed. Connecting to server...");
+          showToast.info("Connecting to session server...", { id: "session-check-info" });
         }
       });
 
@@ -300,7 +304,6 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 pb-16">
-      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
 
       {/* Apply Modal */}
       {selectedProject && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   Ticket,
   Clock,
@@ -71,10 +71,10 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
 
     try {
       await cancelPendingApplication(app._id);
-      toast.success(`Priority ${app.priority || 1} application closed successfully.`);
+      showToast.success(`Priority ${app.priority || 1} application closed successfully.`);
       setApplications((prev) => prev.filter((a) => a._id !== app._id));
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to cancel application.");
+      showToast.error(err, { fallback: "Failed to cancel application. Please try again." });
     }
   };
 
@@ -82,10 +82,10 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
     if (!window.confirm("Are you sure you want to cancel this ticket request?")) return;
     try {
       await cancelTicket(ticketId);
-      toast.success("Ticket request cancelled");
+      showToast.success("Ticket request cancelled");
       setTickets((prev) => prev.filter((t) => t._id !== ticketId && t.ticketId !== ticketId));
-    } catch {
-      toast.error("Failed to cancel ticket");
+    } catch (err) {
+      showToast.error(err, { fallback: "Failed to cancel ticket" });
     }
   };
 

@@ -23,6 +23,24 @@ const createProject = async (req, res) => {
     const teacherId = req.user._id || req.user.id;
     const facultyName = req.user.fullName;
 
+    // Enforce teacher's project quota (default 2 or approved quota)
+    const teacher = await prisma.user.findUnique({
+      where: { id: teacherId },
+      select: { projectQuota: true },
+    });
+    const allowedLimit = teacher?.projectQuota || 2;
+    const currentCount = await prisma.project.count({
+      where: { teacherId },
+    });
+
+    if (currentCount >= allowedLimit) {
+      return res.status(400).json({
+        message: `You have reached your project quota limit (${currentCount}/${allowedLimit} projects created). Please raise a Project Quota Token to request approval from department coordinators for additional projects.`,
+        currentCount,
+        allowedLimit,
+      });
+    }
+
     const savedProject = await prisma.project.create({
       data: { projectTitle, description, stream: canonicalStream, domain, teacherId, facultyName },
     });

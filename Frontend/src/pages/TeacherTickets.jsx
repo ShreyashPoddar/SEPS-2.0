@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { toast, Toaster } from "react-hot-toast";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import showToast from "../utils/toastUtils";
 import {
   Ticket,
   Inbox,
@@ -16,15 +16,30 @@ import {
   History,
   ChevronDown,
   ChevronUp,
+  Plus,
+  Sparkles,
+  ShieldCheck,
+  User,
 } from "lucide-react";
 import {
   getCurrentUser,
   logoutUser,
   getFacultyTickets,
   actOnTicket,
+  getMyQuotaTokens,
+  getAllQuotaTokens,
+  reviewQuotaToken,
 } from "../api";
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RaiseQuotaModal from "../components/RaiseQuotaModal";
+
+const ALLOWED_ADMIN_EMAILS = [
+  "sangeetm@srmist.edu.in",
+  "vadivukk@srmist.edu.in",
+  "elavelvg@srmist.edu.in",
+  "hodece@srmist.edu.in",
+];
 
 const CHANGE_LABEL = {
   name_correction: { text: "Name / Reg. No. Correction", Icon: Edit3 },
@@ -56,7 +71,36 @@ export default function TeacherTickets() {
   const [activeTab, setActiveTab] = useState("active"); // "active" | "past" | "all"
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedTimelineId, setExpandedTimelineId] = useState(null);
+
+  // Quota Tokens State
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialMode =
+    searchParams.get("tab") === "quota"
+      ? "my_quota"
+      : searchParams.get("tab") === "admin_quota"
+      ? "admin_quota"
+      : "change_tickets";
+  const [mainMode, setMainMode] = useState(initialMode); // "change_tickets" | "my_quota" | "admin_quota"
+  const [myQuotaData, setMyQuotaData] = useState({
+    tokens: [],
+    currentQuota: 2,
+    currentProjectsCount: 0,
+    availableSlots: 0,
+  });
+  const [allQuotaTokens, setAllQuotaTokens] = useState([]);
+  const [adminQuotaFilter, setAdminQuotaFilter] = useState("pending"); // "pending" | "approved" | "rejected" | "all"
+  const [adminQuotaSearch, setAdminQuotaSearch] = useState("");
+  const [quotaRemarks, setQuotaRemarks] = useState({});
+  const [quotaBusyId, setQuotaBusyId] = useState(null);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
+
   const navigate = useNavigate();
+
+  const isAdmin = useMemo(() => {
+    if (!user?.email) return false;
+    const email = user.email.toLowerCase().trim();
+    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+  }, [user]);
 
   const fetchTickets = useCallback(() => {
     setLoading(true);
@@ -64,9 +108,34 @@ export default function TeacherTickets() {
       .then((res) => setTickets(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         console.error("Failed to fetch tickets:", err);
-        toast.error("Could not load change tickets.");
+        showToast.error("Could not load change tickets. Please check your connection.", {
+          id: "fetch-tickets-error",
+        });
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  const fetchMyQuota = useCallback(() => {
+    getMyQuotaTokens()
+      .then((res) => {
+        if (res.data) {
+          setMyQuotaData({
+            tokens: res.data.tokens || [],
+            currentQuota: res.data.currentQuota || 2,
+            currentProjectsCount: res.data.currentProjectsCount || 0,
+            availableSlots: res.data.availableSlots || 0,
+          });
+        }
+      })
+      .catch((err) => console.error("Failed to fetch my quota tokens:", err));
+  }, []);
+
+  const fetchAllQuota = useCallback(() => {
+    getAllQuotaTokens()
+      .then((res) => {
+        setAllQuotaTokens(res.data?.tokens || []);
+      })
+      .catch((err) => console.error("Failed to fetch admin quota tokens:", err));
   }, []);
 
   useEffect(() => {
@@ -77,10 +146,21 @@ export default function TeacherTickets() {
         } else {
           setUser(res.data);
           fetchTickets();
+          fetchMyQuota();
+          const email = (res.data.email || "").toLowerCase().trim();
+          if (ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email)) {
+            fetchAllQuota();
+          }
         }
       })
       .catch(() => navigate("/login"));
-  }, [navigate, fetchTickets]);
+  }, [navigate, fetchTickets, fetchMyQuota, fetchAllQuota]);
+
+  // Sync tab change with URL query parameter
+  const switchMainMode = (mode) => {
+    setMainMode(mode);
+    setSearchParams({ tab: mode === "my_quota" ? "quota" : mode === "admin_quota" ? "admin_quota" : "tickets" });
+  };
 
   const handleLogout = async () => {
     try {
@@ -106,13 +186,33 @@ export default function TeacherTickets() {
     setBusyId(id);
     try {
       const res = await actOnTicket(id, action, remarks[id] || "");
-      toast.success(res.data?.message || "Ticket updated.");
+      showToast.success(res.data?.message || "Ticket updated.");
       setRemarks((prev) => ({ ...prev, [id]: "" }));
       fetchTickets();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Could not update the ticket.");
+      showToast.error(err, { fallback: "Could not update the ticket." });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleReviewQuota = async (token, action) => {
+    const id = token.id;
+    const remark = quotaRemarks[id] || "";
+    setQuotaBusyId(id);
+    try {
+      const res = await reviewQuotaToken(id, {
+        action,
+        adminRemarks: remark,
+      });
+      showToast.success(res.data?.message || (action === "approve" ? "Quota request approved!" : "Quota request rejected."));
+      setQuotaRemarks((prev) => ({ ...prev, [id]: "" }));
+      fetchAllQuota();
+      fetchMyQuota();
+    } catch (err) {
+      showToast.error(err, { fallback: "Failed to update quota token." });
+    } finally {
+      setQuotaBusyId(null);
     }
   };
 
@@ -157,8 +257,40 @@ export default function TeacherTickets() {
     });
   }, [tickets, activeTab, openTickets, closedTickets, searchQuery]);
 
+  // Admin Quota filtering
+  const pendingAdminTokensCount = useMemo(
+    () => allQuotaTokens.filter((t) => t.status === "pending").length,
+    [allQuotaTokens]
+  );
+
+  const displayedAdminQuotaTokens = useMemo(() => {
+    let list = allQuotaTokens;
+    if (adminQuotaFilter !== "all") {
+      list = list.filter((t) => t.status === adminQuotaFilter);
+    }
+    if (!adminQuotaSearch.trim()) return list;
+    const q = adminQuotaSearch.toLowerCase().trim();
+    return list.filter((t) => {
+      const tNum = (t.tokenNumber || "").toLowerCase();
+      const tName = (t.teacherName || "").toLowerCase();
+      const tEmail = (t.teacherEmail || "").toLowerCase();
+      const tReason = (t.reason || "").toLowerCase();
+      return (
+        tNum.includes(q) ||
+        tName.includes(q) ||
+        tEmail.includes(q) ||
+        tReason.includes(q)
+      );
+    });
+  }, [allQuotaTokens, adminQuotaFilter, adminQuotaSearch]);
+
+  const pendingMyQuotaCount = useMemo(
+    () => myQuotaData.tokens.filter((t) => t.status === "pending").length,
+    [myQuotaData.tokens]
+  );
+
   if (loading || !user) {
-    return <LoadingSpinner fullScreen text="Loading Student Change Tickets..." />;
+    return <LoadingSpinner fullScreen text="Loading Faculty Tickets & Portals..." />;
   }
 
   const renderTicket = (tck) => {
@@ -166,7 +298,6 @@ export default function TeacherTickets() {
     const { text, Icon } = CHANGE_LABEL[tck.changeType] || CHANGE_LABEL.name_correction;
     const isOpen = tck.status === "pending" || tck.status === "in_review";
     const busy = busyId === id;
-    const changes = tck.requestedChanges || {};
     const timelineList = Array.isArray(tck.timeline) ? tck.timeline : [];
     const isTimelineExpanded = expandedTimelineId === id;
 
@@ -254,98 +385,86 @@ export default function TeacherTickets() {
                   : "bg-amber-50 text-amber-800 border-amber-300"
               }`}
             >
-              Advisor ({tck.facultyAdvisor?.fullName || "Faculty"}):{" "}
+              Faculty Advisor ({tck.facultyAdvisor?.fullName || "Advisor"}):{" "}
               {tck.facultyAdvisorApproval || "pending"}
             </span>
             <span
               className={`px-2 py-0.5 rounded-full font-bold border ${
-                !tck.requiresHodApproval
-                  ? "bg-slate-100 text-slate-500 border-slate-300"
-                  : tck.hodApproval === "approved"
+                tck.hodApproval === "approved"
                   ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                   : tck.hodApproval === "rejected"
                   ? "bg-red-50 text-red-800 border-red-300"
-                  : tck.hodApproval === "pending"
-                  ? "bg-blue-50 text-blue-800 border-blue-300"
-                  : "bg-slate-100 text-slate-500 border-slate-300"
+                  : "bg-amber-50 text-amber-800 border-amber-300"
               }`}
             >
-              HOD ({tck.hod?.fullName || "HOD"}):{" "}
-              {!tck.requiresHodApproval
-                ? "Not Required (No Internship)"
-                : tck.hodApproval === "pending_prior_approvals"
-                ? "Pending Prior Approvals"
-                : tck.hodApproval || "pending"}
+              HOD: {tck.hodApproval || "pending"}
             </span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <p className="text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-              Target Member
-            </p>
-            <p className="font-bold text-sm text-slate-950">{tck.targetMember?.name}</p>
-            <p className="font-mono text-slate-500">{tck.targetMember?.regNo}</p>
-            <p className="text-slate-500">{tck.targetMember?.department}</p>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <p className="text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-              Requested Change
-            </p>
-            {tck.changeType === "name_correction" && (
-              <>
-                <p className="font-bold text-sm text-slate-950">
-                  {changes.correctedName || "—"}
-                </p>
-                <p className="font-mono text-slate-500">{changes.correctedRegNo || "—"}</p>
-              </>
-            )}
-            {tck.changeType === "replacement" && (
-              <>
-                <p className="font-bold text-sm text-slate-950">
-                  {changes.replacementStudent?.fullName || "—"}
-                </p>
-                <p className="font-mono text-slate-500">
-                  {changes.replacementStudent?.regNo || "—"}
-                </p>
-                <p className="text-slate-500">
-                  {changes.replacementStudent?.department || ""}
-                </p>
-              </>
-            )}
-            {tck.changeType === "withdrawal" && (
-              <p className="font-bold text-sm text-slate-950">
-                Remove from the team roster
-              </p>
-            )}
-            {tck.changeType === "cancellation" && (
-              <div className="space-y-1">
-                <p className="font-bold text-sm text-red-600">Full Project Cancellation</p>
-                <p className="text-slate-600 text-[11px]">
-                  Requires Incharge &amp; Advisor approval
-                  {tck.requiresHodApproval
-                    ? " + HOD approval (Internship track)"
-                    : " (No HOD needed for regular track)"}
-                  .
+        {/* Request Details */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+          <p className="font-bold text-slate-700">Change Specifics:</p>
+          {tck.changeType === "name_correction" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <span className="text-slate-500 font-medium">Original Details:</span>
+                <p className="font-semibold text-slate-900">
+                  {tck.targetMember?.name || "N/A"} ({tck.targetMember?.regNo || "N/A"})
                 </p>
               </div>
-            )}
-          </div>
+              <div>
+                <span className="text-slate-500 font-medium">Requested Correction:</span>
+                <p className="font-semibold text-slate-900">
+                  {tck.requestedChanges?.correctedName || "No change"} (
+                  {tck.requestedChanges?.correctedRegNo || "No change"})
+                </p>
+              </div>
+            </div>
+          )}
+          {tck.changeType === "replacement" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <span className="text-slate-500 font-medium">Outgoing Member:</span>
+                <p className="font-semibold text-red-700">
+                  {tck.targetMember?.name || "N/A"} ({tck.targetMember?.regNo || "N/A"})
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-500 font-medium">Incoming Replacement:</span>
+                <p className="font-semibold text-emerald-700">
+                  {tck.requestedChanges?.replacementName || "N/A"} (
+                  {tck.requestedChanges?.replacementRegNo || "N/A"}) -{" "}
+                  {tck.requestedChanges?.replacementEmail || "No email"}
+                </p>
+              </div>
+            </div>
+          )}
+          {tck.changeType === "withdrawal" && (
+            <div>
+              <span className="text-slate-500 font-medium">Member Stepping Down:</span>
+              <p className="font-semibold text-red-700">
+                {tck.targetMember?.name || "N/A"} ({tck.targetMember?.regNo || "N/A"})
+              </p>
+            </div>
+          )}
+          {tck.changeType === "cancellation" && (
+            <div>
+              <span className="text-slate-500 font-medium">Reason for Cancellation:</span>
+              <p className="font-semibold text-red-700">
+                {tck.reason || "Project cancellation requested by team"}
+              </p>
+            </div>
+          )}
+          {tck.reason && tck.changeType !== "cancellation" && (
+            <div className="pt-1 border-t border-slate-200">
+              <span className="text-slate-500 font-medium">Student Stated Reason:</span>
+              <p className="text-slate-800 font-medium italic mt-0.5">{tck.reason}</p>
+            </div>
+          )}
         </div>
 
-        <p className="text-xs text-slate-700">
-          <strong>Justification:</strong> {tck.reason}
-        </p>
-
-        {tck.coordinatorRemarks && (
-          <p className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-950 text-xs font-medium">
-            <strong>Decision remarks:</strong> {tck.coordinatorRemarks}
-          </p>
-        )}
-
-        {/* Audit Timeline Drawer Toggle */}
+        {/* Audit Timeline */}
         {timelineList.length > 0 && (
           <div>
             <button
@@ -432,148 +551,717 @@ export default function TeacherTickets() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
+    <div className="min-h-screen bg-slate-100 text-gray-800 pb-16">
       <div className="relative max-w-5xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
-        <Navbar user={user} handleLogout={handleLogout} />
+        <Navbar
+          user={user}
+          handleLogout={handleLogout}
+          pendingTicketsCount={openTickets.length + (isAdmin ? pendingAdminTokensCount : 0)}
+        />
 
-        <section>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-3xl font-bold flex items-center gap-3 text-gray-900">
-                <Ticket className="w-8 h-8 text-cyan-600" />
-                Change Tickets Management
-              </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Review and approve roster adjustments, team replacements, or project cancellation requests.
-              </p>
-            </div>
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-black flex items-center gap-3 text-slate-950">
+              <Ticket className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-600" />
+              Faculty Tickets & Quota Portal
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1">
+              Manage student team change requests and request quota increases to propose additional major projects.
+            </p>
+          </div>
 
-            {/* Quick Refresh */}
+          {/* Quick Refresh */}
+          <button
+            onClick={() => {
+              fetchTickets();
+              fetchMyQuota();
+              if (isAdmin) fetchAllQuota();
+            }}
+            className="self-start sm:self-auto px-4 py-2 bg-white hover:bg-slate-50 border-2 border-slate-900 rounded-full text-xs font-bold text-slate-900 transition flex items-center gap-2 shadow-sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+            Refresh
+          </button>
+        </div>
+
+        {/* 🌟 Top-Level Mode Selector Tabs */}
+        <div className="bg-white rounded-3xl border-2 border-slate-900 shadow-md p-2 mb-8 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => switchMainMode("change_tickets")}
+            className={`flex-1 min-w-[200px] flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition ${
+              mainMode === "change_tickets"
+                ? "bg-slate-950 text-white shadow-md"
+                : "text-slate-600 hover:text-slate-950 hover:bg-slate-100"
+            }`}
+          >
+            <Ticket className="w-4 h-4 text-cyan-400" />
+            <span>Student Change Tickets</span>
+            {openTickets.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
+                {openTickets.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => switchMainMode("my_quota")}
+            className={`flex-1 min-w-[200px] flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition ${
+              mainMode === "my_quota"
+                ? "bg-slate-950 text-white shadow-md"
+                : "text-slate-600 hover:text-slate-950 hover:bg-slate-100"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>My Project Quota Requests</span>
+            {pendingMyQuotaCount > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-blue-500 text-white font-black text-[10px]">
+                {pendingMyQuotaCount} Pending
+              </span>
+            ) : myQuotaData.tokens.length > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-black text-[10px]">
+                {myQuotaData.tokens.length}
+              </span>
+            ) : null}
+          </button>
+
+          {isAdmin && (
             <button
-              onClick={fetchTickets}
-              className="self-start sm:self-auto px-4 py-2 bg-white hover:bg-slate-50 border-2 border-slate-900 rounded-full text-xs font-bold text-slate-900 transition flex items-center gap-2 shadow-sm"
+              onClick={() => switchMainMode("admin_quota")}
+              className={`flex-1 min-w-[220px] flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition ${
+                mainMode === "admin_quota"
+                  ? "bg-slate-950 text-white shadow-md"
+                  : "text-slate-600 hover:text-slate-950 hover:bg-slate-100"
+              }`}
             >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
-              Refresh Tickets
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Review Faculty Quotas</span>
+              <span className="px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-900 text-[10px] font-black uppercase">
+                Admin
+              </span>
+              {pendingAdminTokensCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
+                  {pendingAdminTokensCount}
+                </span>
+              )}
             </button>
-          </div>
-
-          {/* Tab Navigation & Search Bar */}
-          <div className="bg-white rounded-3xl border-2 border-slate-900 shadow-md p-4 sm:p-5 mb-8 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              {/* Tabs */}
-              <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-300">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("active")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                    activeTab === "active"
-                      ? "bg-slate-950 text-white shadow font-extrabold"
-                      : "text-slate-600 hover:text-slate-950"
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Active Tickets</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                      activeTab === "active"
-                        ? "bg-amber-400 text-slate-950"
-                        : "bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    {openTickets.length}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("past")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                    activeTab === "past"
-                      ? "bg-slate-950 text-white shadow font-extrabold"
-                      : "text-slate-600 hover:text-slate-950"
-                  }`}
-                >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Past / Resolved</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                      activeTab === "past"
-                        ? "bg-emerald-400 text-slate-950"
-                        : "bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    {closedTickets.length}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("all")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                    activeTab === "all"
-                      ? "bg-slate-950 text-white shadow font-extrabold"
-                      : "text-slate-600 hover:text-slate-950"
-                  }`}
-                >
-                  <Inbox className="w-3.5 h-3.5" />
-                  <span>All Tickets</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                      activeTab === "all"
-                        ? "bg-cyan-400 text-slate-950"
-                        : "bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    {tickets.length}
-                  </span>
-                </button>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative w-full md:w-72">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by ticket, name, reg no..."
-                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Ticket Listing */}
-          {displayedTickets.length === 0 ? (
-            <div className="text-center text-gray-500 bg-white p-12 rounded-3xl border-2 border-slate-900 shadow-md flex flex-col items-center gap-4">
-              <Inbox className="w-16 h-16 text-slate-300" />
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  {activeTab === "active"
-                    ? "All Caught Up!"
-                    : activeTab === "past"
-                    ? "No Past Tickets Found"
-                    : "No Change Tickets Found"}
-                </h3>
-                <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
-                  {searchQuery.trim()
-                    ? `No tickets match your search "${searchQuery}". Try clearing the search filter.`
-                    : activeTab === "active"
-                    ? "There are no pending tickets awaiting your action right now."
-                    : activeTab === "past"
-                    ? "Previously approved or rejected tickets will appear here with full audit trails."
-                    : "Nothing has been raised against your projects yet."}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">{displayedTickets.map(renderTicket)}</div>
           )}
-        </section>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════
+            MODE 1: STUDENT CHANGE TICKETS
+        ══════════════════════════════════════════════════════ */}
+        {mainMode === "change_tickets" && (
+          <section>
+            {/* Tab Navigation & Search Bar */}
+            <div className="bg-white rounded-3xl border-2 border-slate-900 shadow-md p-4 sm:p-5 mb-8 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Tabs */}
+                <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("active")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                      activeTab === "active"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Active Tickets</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeTab === "active"
+                          ? "bg-amber-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {openTickets.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("past")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                      activeTab === "past"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Past / Resolved</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeTab === "past"
+                          ? "bg-emerald-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {closedTickets.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("all")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                      activeTab === "all"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <Inbox className="w-3.5 h-3.5" />
+                    <span>All Tickets</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeTab === "all"
+                          ? "bg-cyan-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {tickets.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative w-full md:w-72">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by ticket, name, reg no..."
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Ticket Listing */}
+            {displayedTickets.length === 0 ? (
+              <div className="text-center text-gray-500 bg-white p-12 rounded-3xl border-2 border-slate-900 shadow-md flex flex-col items-center gap-4">
+                <Inbox className="w-16 h-16 text-slate-300" />
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    {activeTab === "active"
+                      ? "All Caught Up!"
+                      : activeTab === "past"
+                      ? "No Past Tickets Found"
+                      : "No Change Tickets Found"}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                    {searchQuery.trim()
+                      ? `No tickets match your search "${searchQuery}". Try clearing the search filter.`
+                      : activeTab === "active"
+                      ? "There are no pending tickets awaiting your action right now."
+                      : activeTab === "past"
+                      ? "Previously approved or rejected tickets will appear here with full audit trails."
+                      : "Nothing has been raised against your projects yet."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">{displayedTickets.map(renderTicket)}</div>
+            )}
+          </section>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
+            MODE 2: MY PROJECT QUOTA REQUESTS (TEACHER VIEW)
+        ══════════════════════════════════════════════════════ */}
+        {mainMode === "my_quota" && (
+          <section className="space-y-6">
+            {/* Quota Overview Card */}
+            <div className="bg-white rounded-3xl border-2 border-slate-900 shadow-md p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 text-[10px] font-black uppercase tracking-wider">
+                    Upload Quota Status
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    Faculty: {user?.fullName}
+                  </span>
+                </div>
+                <h3 className="text-2xl font-black text-slate-950">
+                  Allowed Limit: {myQuotaData.currentQuota} Major Projects
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl">
+                  By default, each teacher is allocated a maximum of 2 projects. If your research lab or division needs to offer additional topics, you can raise an administrative quota token below.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <span className="px-3 py-1 bg-slate-100 border border-slate-300 rounded-full text-xs font-extrabold text-slate-800">
+                    {myQuotaData.currentProjectsCount} Projects Created
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
+                    myQuotaData.currentProjectsCount >= myQuotaData.currentQuota
+                      ? "bg-amber-50 text-amber-900 border-amber-300"
+                      : "bg-emerald-50 text-emerald-900 border-emerald-300"
+                  }`}>
+                    {Math.max(0, myQuotaData.currentQuota - myQuotaData.currentProjectsCount)} Available Slots
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex-shrink-0">
+                <button
+                  onClick={() => setIsQuotaModalOpen(true)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 bg-slate-950 hover:bg-slate-800 text-white rounded-full font-black text-xs sm:text-sm border-2 border-slate-900 shadow-lg transition active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Raise Quota Token</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List of Raised Tokens */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-slate-950 flex items-center gap-2">
+                  <span>My Quota Tokens</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 text-xs font-black">
+                    {myQuotaData.tokens.length}
+                  </span>
+                </h3>
+              </div>
+
+              {myQuotaData.tokens.length === 0 ? (
+                <div className="text-center text-gray-500 bg-white p-12 rounded-3xl border-2 border-slate-900 shadow-md flex flex-col items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-cyan-50 border-2 border-cyan-200 flex items-center justify-center text-cyan-700">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">
+                      No Quota Tokens Raised Yet
+                    </h4>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                      You are currently operating on the standard {myQuotaData.currentQuota}-project limit. If you need more slots for your teams, click "Raise Quota Token" above to send a request to department coordinators.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsQuotaModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-full font-black text-xs shadow-md transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Raise Permission Token</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myQuotaData.tokens.map((token) => (
+                    <div
+                      key={token.id}
+                      className="bg-white rounded-2xl border-2 border-slate-900 shadow-md p-6 space-y-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-black bg-slate-950 text-white">
+                              Token #{token.tokenNumber || token.id.slice(0, 8)}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-50 text-cyan-900 border border-cyan-300">
+                              Requested +{token.requestedProjects} Projects
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                                token.status === "approved"
+                                  ? "bg-emerald-100 text-emerald-900 border-emerald-400"
+                                  : token.status === "rejected"
+                                  ? "bg-red-100 text-red-900 border-red-400"
+                                  : "bg-amber-100 text-amber-900 border-amber-400"
+                              }`}
+                            >
+                              {token.status === "approved"
+                                ? `Approved (+${token.approvedProjects || token.requestedProjects} Slots)`
+                                : token.status === "rejected"
+                                ? "Declined by Admin"
+                                : "Pending Admin Review"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 font-medium">
+                            Submitted on{" "}
+                            {new Date(token.createdAt).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stated Justification */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                          Reason / Description Provided:
+                        </span>
+                        <p className="text-xs sm:text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+                          {token.reason}
+                        </p>
+                      </div>
+
+                      {/* Admin Decision Feedback */}
+                      {token.status !== "pending" && (
+                        <div
+                          className={`p-4 rounded-xl border-2 ${
+                            token.status === "approved"
+                              ? "bg-emerald-50/60 border-emerald-300 text-emerald-950"
+                              : "bg-red-50/60 border-red-300 text-red-950"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs font-bold mb-1">
+                            <span className="flex items-center gap-1.5 font-black uppercase tracking-wider text-[11px]">
+                              {token.status === "approved" ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                              Coordinator Decision: {token.status.toUpperCase()}
+                            </span>
+                            {token.reviewedAt && (
+                              <span className="text-[11px] font-medium text-slate-500">
+                                {new Date(token.reviewedAt).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            )}
+                          </div>
+                          {token.adminRemarks ? (
+                            <p className="text-xs font-semibold mt-1">
+                              <strong>Remarks:</strong> {token.adminRemarks}
+                            </p>
+                          ) : (
+                            <p className="text-xs italic text-slate-500 mt-1">
+                              No additional remarks noted by the coordinator.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
+            MODE 3: ADMIN FACULTY QUOTA REVIEW (ADMINS ONLY)
+        ══════════════════════════════════════════════════════ */}
+        {mainMode === "admin_quota" && isAdmin && (
+          <section className="space-y-6">
+            {/* Filter and Search Bar */}
+            <div className="bg-white rounded-3xl border-2 border-slate-900 shadow-md p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Sub-Filters */}
+                <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-300 flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setAdminQuotaFilter("pending")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      adminQuotaFilter === "pending"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Pending Review</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        adminQuotaFilter === "pending"
+                          ? "bg-amber-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {allQuotaTokens.filter((t) => t.status === "pending").length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdminQuotaFilter("approved")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      adminQuotaFilter === "approved"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Approved</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        adminQuotaFilter === "approved"
+                          ? "bg-emerald-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {allQuotaTokens.filter((t) => t.status === "approved").length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdminQuotaFilter("rejected")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      adminQuotaFilter === "rejected"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Declined</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        adminQuotaFilter === "rejected"
+                          ? "bg-red-400 text-white"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {allQuotaTokens.filter((t) => t.status === "rejected").length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdminQuotaFilter("all")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      adminQuotaFilter === "all"
+                        ? "bg-slate-950 text-white shadow font-extrabold"
+                        : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    <Inbox className="w-3.5 h-3.5" />
+                    <span>All Requests</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        adminQuotaFilter === "all"
+                          ? "bg-cyan-400 text-slate-950"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {allQuotaTokens.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative w-full md:w-72">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={adminQuotaSearch}
+                    onChange={(e) => setAdminQuotaSearch(e.target.value)}
+                    placeholder="Search by faculty, token, email..."
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* List of Admin Review Tokens */}
+            {displayedAdminQuotaTokens.length === 0 ? (
+              <div className="text-center text-gray-500 bg-white p-12 rounded-3xl border-2 border-slate-900 shadow-md flex flex-col items-center gap-4">
+                <ShieldCheck className="w-16 h-16 text-slate-300" />
+                <div>
+                  <h4 className="text-lg font-bold text-slate-900">
+                    {adminQuotaFilter === "pending"
+                      ? "No Pending Quota Tokens!"
+                      : "No Quota Tokens Match Your Filter"}
+                  </h4>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                    {adminQuotaSearch.trim()
+                      ? `No quota tokens match "${adminQuotaSearch}".`
+                      : adminQuotaFilter === "pending"
+                      ? "All faculty quota requests have been reviewed and acted upon."
+                      : "Requests submitted by faculty members will appear here."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {displayedAdminQuotaTokens.map((token) => {
+                  const isPending = token.status === "pending";
+                  const busy = quotaBusyId === token.id;
+
+                  return (
+                    <div
+                      key={token.id}
+                      className={`bg-white rounded-2xl border-2 transition shadow-md p-6 space-y-4 ${
+                        isPending ? "border-slate-900" : "border-slate-300 opacity-95"
+                      }`}
+                    >
+                      {/* Token Header */}
+                      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-black bg-slate-950 text-white">
+                              Token #{token.tokenNumber || token.id.slice(0, 8)}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-100 text-cyan-950 border border-cyan-400">
+                              Requested +{token.requestedProjects} Additional Projects
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                                token.status === "approved"
+                                  ? "bg-emerald-100 text-emerald-900 border-emerald-400"
+                                  : token.status === "rejected"
+                                  ? "bg-red-100 text-red-900 border-red-400"
+                                  : "bg-amber-100 text-amber-900 border-amber-400"
+                              }`}
+                            >
+                              {token.status === "approved"
+                                ? `Approved (+${token.approvedProjects || token.requestedProjects} Slots)`
+                                : token.status === "rejected"
+                                ? "Declined"
+                                : "Pending Review"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <User className="w-4 h-4 text-slate-500" />
+                            <h4 className="text-base font-black text-slate-950">
+                              {token.teacherName}
+                            </h4>
+                            <span className="text-xs text-slate-500 font-medium">
+                              ({token.teacherEmail})
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Current Usage:{" "}
+                            <strong className="text-slate-800">
+                              {token.teacherCurrentProjectsCount} uploaded
+                            </strong>{" "}
+                            of{" "}
+                            <strong className="text-slate-800">
+                              {token.teacherCurrentQuota} permitted slots
+                            </strong>{" "}
+                            &bull; Submitted on{" "}
+                            {new Date(token.createdAt).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stated Justification */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                          Teacher's Justification & Purpose:
+                        </span>
+                        <p className="text-xs sm:text-sm text-slate-900 font-medium whitespace-pre-wrap leading-relaxed">
+                          {token.reason}
+                        </p>
+                      </div>
+
+                      {/* Reviewed Info if resolved */}
+                      {!isPending && (
+                        <div
+                          className={`p-4 rounded-xl border ${
+                            token.status === "approved"
+                              ? "bg-emerald-50/60 border-emerald-300 text-emerald-950"
+                              : "bg-red-50/60 border-red-300 text-red-950"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs font-bold mb-1">
+                            <span className="font-black uppercase tracking-wider text-[11px]">
+                              Decision by: {token.reviewedBy?.fullName || token.reviewedBy?.email || "Admin"}
+                            </span>
+                            {token.reviewedAt && (
+                              <span className="text-[11px] font-medium text-slate-500">
+                                {new Date(token.reviewedAt).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            )}
+                          </div>
+                          {token.adminRemarks ? (
+                            <p className="text-xs font-semibold mt-1">
+                              <strong>Remarks Provided:</strong> {token.adminRemarks}
+                            </p>
+                          ) : (
+                            <p className="text-xs italic text-slate-500 mt-1">
+                              No remarks recorded.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Admin Action Box for Pending Tokens */}
+                      {isPending && (
+                        <div className="pt-3 border-t border-slate-200 space-y-3">
+                          <div>
+                            <label className="text-xs font-bold text-slate-700 block mb-1">
+                              Administrative Remarks (Optional feedback to faculty member):
+                            </label>
+                            <input
+                              type="text"
+                              value={quotaRemarks[token.id] || ""}
+                              onChange={(e) =>
+                                setQuotaRemarks((prev) => ({
+                                  ...prev,
+                                  [token.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g. Approved for Antenna & RF group projects..."
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleReviewQuota(token, "approve")}
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black transition shadow-md active:scale-95"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>
+                                Approve (+{token.requestedProjects} Projects Allowed)
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleReviewQuota(token, "reject")}
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-black transition shadow-md active:scale-95"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              <span>Decline Request</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </div>
+
+      {/* Raise Quota Modal */}
+      <RaiseQuotaModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
+        onSuccess={() => {
+          fetchMyQuota();
+          if (isAdmin) fetchAllQuota();
+          showToast.success("Project quota request submitted to administrators!");
+        }}
+        currentQuota={myQuotaData.currentQuota}
+        currentProjectsCount={myQuotaData.currentProjectsCount}
+      />
     </div>
   );
 }
-

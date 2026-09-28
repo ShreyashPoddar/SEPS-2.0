@@ -18,7 +18,8 @@ import notificationRoutes from "./routes/notification.routes.js";
 import infoRoutes from "./routes/info.routes.js";
 import globalDeadlineRoutes from "./routes/globalDeadline.routes.js";
 import statisticsRoutes from "./routes/statistics.routes.js";
-import ticketRoutes from "./routes/ticket.routes.js";
+import quotaTokenRoutes from "./routes/projectquotatoken.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 import rateLimit from "express-rate-limit";
 
 // Load environment variables
@@ -129,6 +130,8 @@ app.use("/api/info", infoRoutes);
 app.use("/api/global-deadline", globalDeadlineRoutes);
 app.use("/api/statistics", statisticsRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/quota-tokens", quotaTokenRoutes);
+app.use("/api/admin", adminRoutes);
 
 // SPA client-side fallback (route all non-API GET requests to index.html)
 if (clientDist) {
@@ -148,6 +151,20 @@ if (clientDist) {
 // Catch-all for unhandled routes
 app.all("*", (req, res) => {
   res.status(404).json({ message: "Route not found" });
+});
+
+// Centralized Express error handler — guarantees clean JSON responses and prevents raw stack dumps
+app.use((err, req, res, next) => {
+  console.error("Unhandled error caught in middleware:", err);
+  if (err.message && err.message.startsWith("CORS")) {
+    return res.status(403).json({ message: "Origin not allowed by security policy" });
+  }
+  const statusCode = err.status || err.statusCode || 500;
+  const message =
+    statusCode === 500
+      ? "An internal server error occurred. Please try again later."
+      : err.message || "An unexpected error occurred.";
+  res.status(statusCode).json({ message });
 });
 
 // Render free-tier web services use port 10000 by default — fall back to 7860 for HF/local

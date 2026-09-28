@@ -764,16 +764,21 @@ export const deleteNotification = (id) =>
   );
 
 // --- USER SEARCH ROUTE ---
-export const searchStudents = (name) =>
-  withFallback(
-    () => API.get(`/usersearch?q=${name}`),
+export const searchStudents = (name) => {
+  const query = (name || "").trim();
+  if (query.length < 2) {
+    return Promise.resolve({ data: [] });
+  }
+  return withFallback(
+    () => API.get(`/usersearch?q=${encodeURIComponent(query)}`),
     () => {
-      const q = (name || "").toLowerCase();
+      const q = query.toLowerCase();
       return mockStudents.filter(
         (s) => s.fullName.toLowerCase().includes(q) || s.regNo.toLowerCase().includes(q)
       );
     }
   );
+};
 
 // --- TEAM APPROVAL ROUTES ---
 export const approveApplication = (id) =>
@@ -867,3 +872,14 @@ export const getStatistics = () =>
       ],
     })
   );
+
+// Project Quota Tokens (Teacher Request for Additional Project Creation Limit)
+export const createQuotaToken = (data) => API.post("/quota-tokens", data);
+export const getMyQuotaTokens = () => API.get("/quota-tokens/my");
+export const getAllQuotaTokens = () => API.get("/quota-tokens/all");
+export const reviewQuotaToken = (id, data) => API.patch(`/quota-tokens/${id}/review`, data);
+
+// Admin Database Flush & Semester Reset
+export const flushDatabase = (confirmation) =>
+  API.post("/admin/flush-database", { confirmation });
+

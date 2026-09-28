@@ -9,6 +9,7 @@ import {
   getGlobalDeadline,
   getFacultyTickets,
   getNotifications,
+  getMyQuotaTokens,
 } from "../api";
 import { useNavigate } from "react-router-dom";
 import {
@@ -36,6 +37,8 @@ import {
 import Navbar from "../components/Navbar";
 import SpecializationDropdown from "../components/SpecializationDropdown";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RaiseQuotaModal from "../components/RaiseQuotaModal";
+import FlushDatabaseModal from "../components/FlushDatabaseModal";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { parseStreams } from "../utils/streamUtils";
@@ -118,11 +121,25 @@ export default function TeacherDashboard() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
+  const [quotaTokens, setQuotaTokens] = useState([]);
+  const [isFlushModalOpen, setIsFlushModalOpen] = useState(false);
 
   const showNotification = (message, type = "error") => {
     setNotification({ message, type });
     setTimeout(() => setNotification({ message: "", type: "" }), 4000);
   };
+
+  const loadQuotaTokens = useCallback(() => {
+    getMyQuotaTokens()
+      .then((res) => {
+        setQuotaTokens(res.data?.tokens || []);
+        if (res.data?.currentQuota) {
+          setUser((prev) => (prev ? { ...prev, projectQuota: res.data.currentQuota } : prev));
+        }
+      })
+      .catch((err) => console.error("Error loading quota tokens:", err));
+  }, []);
 
   const loadProjectsForCurrentUser = useCallback(() => {
     getTeacherProjects()
@@ -176,6 +193,7 @@ export default function TeacherDashboard() {
         loadProjectsForCurrentUser();
         loadAllProjects();
         loadTicketsAndNotifications();
+        loadQuotaTokens();
       })
       .catch((err) => {
         if (err.response?.status === 401) {
@@ -198,12 +216,14 @@ export default function TeacherDashboard() {
         }
       })
       .catch((err) => console.error("Error fetching deadline:", err));
-  }, [navigate, loadProjectsForCurrentUser, loadAllProjects, loadTicketsAndNotifications]);
+  }, [navigate, loadProjectsForCurrentUser, loadAllProjects, loadTicketsAndNotifications, loadQuotaTokens]);
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (projects.length >= 2) {
-      showNotification("You cannot upload more than 2 projects.");
+    const maxQuota = user?.projectQuota || 2;
+    if (projects.length >= maxQuota) {
+      showNotification(`You cannot upload more than ${maxQuota} projects without an approved quota token.`);
+      setIsQuotaModalOpen(true);
       return;
     }
 
@@ -332,6 +352,11 @@ export default function TeacherDashboard() {
     searchQuery.trim() || selectedDomain !== "all" || approvalFilter !== "all"
   );
 
+  const maxQuota = user?.projectQuota || 2;
+  const isAtQuota = projects.length >= maxQuota;
+  const pendingQuotaTokens = quotaTokens.filter((t) => t.status === "pending");
+  const hasPendingQuota = pendingQuotaTokens.length > 0;
+
   if (initialLoading) {
     return (
       <LoadingSpinner fullScreen text="Loading Teacher Portal & Project Directory..." />
@@ -427,7 +452,7 @@ export default function TeacherDashboard() {
         )}
 
         {/* Coordinator Controls for Allowed Teachers / Admins */}
-        {user && allowedEmails.includes(user.email) && (
+        {user && ALLOWED_ADMIN_EMAILS.includes(user.email) && (
           <div className="mb-6 flex justify-end gap-3 flex-wrap">
             <button
               onClick={() => navigate("/teacher/set-global-deadline")}
@@ -443,16 +468,81 @@ export default function TeacherDashboard() {
               <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
               <span>Statistics Report</span>
             </button>
+            <button
+              onClick={() => setIsFlushModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-full font-bold text-xs border-2 border-red-300 shadow-sm transition active:scale-95"
+              title="Reset and wipe all current semester projects and teams to start fresh"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-red-600" />
+              <span>Flush Semester Data</span>
+            </button>
+          </div>
+        )}
+
+        {/* Quota Pending Review Alert Banner */}
+        {hasPendingQuota && (
+          <div className="mb-6 p-4 rounded-3xl bg-blue-50 border-2 border-blue-400 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-blue-600 text-white shadow-sm flex-shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-200 text-blue-900 text-[10px] font-black uppercase tracking-wider">
+                    Quota Request Pending
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-700">
+                    Token #{pendingQuotaTokens[0]?.tokenNumber}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 font-medium mt-0.5">
+                  You requested permission to add <strong>+{pendingQuotaTokens[0]?.requestedProjects}</strong> more projects. Department coordinators have been notified.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate("/teacher/tickets?tab=quota")}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition active:scale-95 flex-shrink-0"
+            >
+              <span>View Token Status</span>
+              <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+            </button>
+          </div>
+        )}
+
+        {/* Quota Limit Reached Banner (if no pending request) */}
+        {!hasPendingQuota && isAtQuota && (
+          <div className="mb-6 p-4 rounded-3xl bg-amber-50 border-2 border-amber-300 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-sm flex-shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                  Default Project Upload Limit Reached ({projects.length}/{maxQuota})
+                </h4>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Faculty are allocated {maxQuota} project topics by default. You can request department coordinators to grant permission for additional slots.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsQuotaModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs shadow-sm border border-cyan-800 transition active:scale-95 flex-shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Request More Projects</span>
+            </button>
           </div>
         )}
 
         {/* Upload Project Trigger Banner */}
         <div className="mb-8">
-          <button
-            onClick={() => setIsUploadFormVisible(!isUploadFormVisible)}
-            className="w-full flex justify-between items-center p-5 bg-white rounded-3xl shadow-md border-2 border-slate-900 hover:bg-slate-50 transition"
-          >
-            <div className="flex items-center gap-3.5">
+          <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-white rounded-3xl shadow-md border-2 border-slate-900 gap-4">
+            <div
+              className="flex items-center gap-3.5 cursor-pointer flex-1"
+              onClick={() => setIsUploadFormVisible(!isUploadFormVisible)}
+            >
               <div className="p-2.5 rounded-2xl bg-slate-950 text-cyan-400 border border-slate-800">
                 <Plus className="w-5 h-5" />
               </div>
@@ -465,19 +555,36 @@ export default function TeacherDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden sm:inline-block px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-[11px] font-extrabold text-slate-800">
-                {projects.length}/2 Projects Created
+            <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
+              <span className={`px-3 py-1.5 rounded-full border text-xs font-black ${
+                isAtQuota
+                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                  : "bg-slate-100 text-slate-800 border-slate-300"
+              }`}>
+                {projects.length}/{maxQuota} Projects Created
               </span>
-              <motion.div
-                animate={{ rotate: isUploadFormVisible ? 180 : 0 }}
-                transition={{ duration: 0.3 }}
-                className="p-2 rounded-full hover:bg-slate-100 text-slate-900"
+              <button
+                type="button"
+                onClick={() => setIsQuotaModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-950 border-2 border-cyan-800 rounded-full font-black text-xs shadow-sm transition active:scale-95"
               >
-                <ChevronDown className="w-5 h-5" />
-              </motion.div>
+                <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
+                <span>Request More</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsUploadFormVisible(!isUploadFormVisible)}
+                className="p-2 rounded-full hover:bg-slate-100 text-slate-900 transition"
+              >
+                <motion.div
+                  animate={{ rotate: isUploadFormVisible ? 180 : 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </motion.div>
+              </button>
             </div>
-          </button>
+          </div>
         </div>
 
         {/* Collapsible Upload Form */}
@@ -572,7 +679,7 @@ export default function TeacherDashboard() {
                         required
                       >
                         <option value="">Select Domain</option>
-                        {domainOptions.map((domain) => (
+                        {DOMAIN_OPTIONS.map((domain) => (
                           <option key={domain} value={domain}>
                             {domain}
                           </option>
@@ -584,7 +691,7 @@ export default function TeacherDashboard() {
                   <div className="pt-2">
                     <button
                       type="submit"
-                      disabled={loading || projects.length >= 2}
+                      disabled={loading || isAtQuota}
                       className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-slate-950 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-full border-2 border-black shadow-md transition-all active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? (
@@ -592,8 +699,8 @@ export default function TeacherDashboard() {
                           <LoadingSpinner size="xs" color="#ffffff" />
                           <span>Uploading Project...</span>
                         </>
-                      ) : projects.length >= 2 ? (
-                        "Max Limit Reached (2 Projects Maximum)"
+                      ) : isAtQuota ? (
+                        `Max Limit Reached (${maxQuota} Projects Allowed)`
                       ) : (
                         <>
                           <Plus className="w-4 h-4 text-cyan-400" />
@@ -601,6 +708,21 @@ export default function TeacherDashboard() {
                         </>
                       )}
                     </button>
+                    {isAtQuota && (
+                      <div className="mt-3 text-center">
+                        <p className="text-xs text-slate-600 font-medium mb-1.5">
+                          Reached your limit of {maxQuota} projects? Request permission to add more.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsQuotaModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black rounded-full shadow-md border-2 border-cyan-900 transition active:scale-95"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Raise Token for Additional Projects</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </form>
               </div>
@@ -1014,6 +1136,31 @@ export default function TeacherDashboard() {
           )}
         </section>
       </div>
+
+      {/* Raise Quota Modal */}
+      <RaiseQuotaModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
+        onSuccess={() => {
+          loadQuotaTokens();
+          showNotification("Quota request submitted successfully to administrators!", "success");
+        }}
+        currentQuota={maxQuota}
+        currentProjectsCount={projects.length}
+      />
+
+      {/* Flush Database Modal */}
+      <FlushDatabaseModal
+        isOpen={isFlushModalOpen}
+        onClose={() => setIsFlushModalOpen(false)}
+        onSuccess={() => {
+          showNotification("Semester round reset successfully! Portal is ready for the new semester.", "success");
+          loadProjectsForCurrentUser();
+          loadAllProjects();
+          loadTicketsAndNotifications();
+          loadQuotaTokens();
+        }}
+      />
     </div>
   );
 }

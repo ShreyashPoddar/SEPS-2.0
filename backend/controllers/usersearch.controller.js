@@ -5,16 +5,19 @@ export const searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
 
-    if (!q) {
-      return res.status(400).json({ message: "Query parameter 'q' is required" });
+    if (!q || typeof q !== "string" || q.trim().length < 2) {
+      return res.json([]);
     }
 
+    const searchTerm = q.trim();
     const unavailableStudentIds = new Set();
 
     const approvedTeamMembers = await prisma.teamMember.findMany({
       select: { studentId: true },
     });
-    approvedTeamMembers.forEach((m) => unavailableStudentIds.add(m.studentId));
+    approvedTeamMembers.forEach((m) => {
+      if (m.studentId) unavailableStudentIds.add(m.studentId);
+    });
 
     const activeMembers = await prisma.applicationMember.findMany({
       where: {
@@ -28,21 +31,29 @@ export const searchUsers = async (req, res) => {
     });
     const counts = {};
     activeMembers.forEach((m) => {
-      counts[m.studentId] = (counts[m.studentId] || 0) + 1;
+      if (m.studentId) {
+        counts[m.studentId] = (counts[m.studentId] || 0) + 1;
+      }
     });
     Object.keys(counts).forEach((id) => {
       if (counts[id] >= 2) unavailableStudentIds.add(id);
     });
 
+    const unavailableArr = Array.from(unavailableStudentIds).filter(Boolean);
+    const whereClause = {
+      role: "student",
+      OR: [
+        { fullName: { contains: searchTerm } },
+        { regNo: { contains: searchTerm } },
+      ],
+    };
+
+    if (unavailableArr.length > 0) {
+      whereClause.id = { notIn: unavailableArr };
+    }
+
     const users = await prisma.user.findMany({
-      where: {
-        role: "student",
-        id: { notIn: Array.from(unavailableStudentIds) },
-        OR: [
-          { fullName: { contains: q } },
-          { regNo: { contains: q } },
-        ],
-      },
+      where: whereClause,
       select: {
         id: true,
         regNo: true,
@@ -65,6 +76,6 @@ export const searchUsers = async (req, res) => {
     res.json(users);
   } catch (err) {
     console.error("User search error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Unable to search students at this time." });
   }
 };

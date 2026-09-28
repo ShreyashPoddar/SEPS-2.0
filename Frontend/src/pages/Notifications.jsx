@@ -8,7 +8,7 @@ import {
   getCurrentUser,
   logoutUser,
 } from "../api";
-import { toast, Toaster } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   Bell,
   Check,
@@ -48,11 +48,18 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback((role) => {
     setLoading(true);
-    Promise.all([getPendingInvitations(), getNotifications()])
-      .then(([invRes, noteRes]) => {
-        setInvitations(invRes.data || []);
+    const promises = [getNotifications()];
+    if (role === "student") {
+      promises.push(getPendingInvitations());
+    } else {
+      promises.push(Promise.resolve({ data: [] }));
+    }
+
+    Promise.all(promises)
+      .then(([noteRes, invRes]) => {
+        setInvitations(invRes?.data || []);
         // Backend returns { success, notifications }; tolerate a bare array too.
         const list = Array.isArray(noteRes.data)
           ? noteRes.data
@@ -61,7 +68,9 @@ export default function Notifications() {
       })
       .catch((err) => {
         console.error("Failed to fetch notifications:", err);
-        toast.error("Could not load notifications.");
+        showToast.error("Could not load notifications. Please check your connection.", {
+          id: "notifications-load-error",
+        });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -69,11 +78,11 @@ export default function Notifications() {
   useEffect(() => {
     getCurrentUser()
       .then((res) => {
-        if (res.data.role !== "student") {
-          navigate("/teacher-dashboard");
+        if (!res.data) {
+          navigate("/login");
         } else {
           setUser(res.data);
-          fetchData();
+          fetchData(res.data.role);
         }
       })
       .catch(() => navigate("/login"));
@@ -84,9 +93,9 @@ export default function Notifications() {
       prev.filter((invite) => invite.applicationId !== applicationId)
     );
 
-    toast.promise(respondToInvitation({ applicationId, memberId, response }), {
+    showToast.promise(respondToInvitation({ applicationId, memberId, response }), {
       loading: "Submitting your response...",
-      success: (res) => res.data.message,
+      success: (res) => res.data?.message || "Response recorded!",
       error: (err) => {
         fetchData(); // refresh if error
         return err.response?.data?.message || "Action failed.";
@@ -101,7 +110,7 @@ export default function Notifications() {
       await deleteNotification(id);
     } catch (err) {
       setNotifications(previous); // put it back if the server refused
-      toast.error(err.response?.data?.message || "Could not dismiss notification.");
+      showToast.error(err, { fallback: "Could not dismiss notification." });
     }
   };
 
@@ -120,7 +129,6 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
       <div className="relative max-w-4xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar
           user={user}
@@ -128,7 +136,8 @@ export default function Notifications() {
           notificationCount={invitations.length + notifications.length}
         />
 
-        <section>
+        {user?.role === "student" && (
+          <section>
           <h2 className="text-3xl font-bold mb-8 flex items-center gap-3 text-gray-700">
             <Bell className="w-8 h-8 text-cyan-600" />
             Your Invitations
@@ -232,6 +241,7 @@ export default function Notifications() {
             </div>
           )}
         </section>
+        )}
 
         <section className="mt-12">
           <h2 className="text-3xl font-bold mb-8 flex items-center gap-3 text-gray-700">
@@ -249,7 +259,7 @@ export default function Notifications() {
               <Bell className="w-16 h-16 text-slate-400" />
               <h3 className="text-2xl font-bold">Nothing New</h3>
               <p>
-                Approvals, rejections and roster changes from your faculty guide
+                Approvals, project quota token updates, and departmental alerts
                 will appear here.
               </p>
             </div>

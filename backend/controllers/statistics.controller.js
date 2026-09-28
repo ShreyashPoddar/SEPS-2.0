@@ -27,6 +27,7 @@ export const getStatistics = async (req, res) => {
       const d = p.domain || "General";
       domainCounts[d] = (domainCounts[d] || 0) + 1;
     });
+
     const teachersWithProjects = teachers.filter((t) => teacherIdToProjects[t.id]);
     const teachersWithoutProjects = teachers.filter((t) => !teacherIdToProjects[t.id]);
 
@@ -35,22 +36,38 @@ export const getStatistics = async (req, res) => {
       include: { members: true },
     });
 
-    const approvedTeamMembers = await prisma.teamMember.findMany({
-      select: { studentId: true },
-    });
-
-    const appliedStudentIds = new Set();
-    applications.forEach((app) => {
-      app.members.forEach((m) => appliedStudentIds.add(m.studentId));
-    });
-    approvedTeamMembers.forEach((m) => appliedStudentIds.add(m.studentId));
-    const studentsWithApplications = students.filter((s) => appliedStudentIds.has(s.id));
-    const studentsWithoutApplications = students.filter((s) => !appliedStudentIds.has(s.id));
-
-    const groupApplications = await prisma.teamApproved.findMany({
-      where: { applicationType: "group" },
+    // Fetch approved teams with members, ordered by creation date
+    const allApprovedTeams = await prisma.teamApproved.findMany({
       include: { members: true },
+      orderBy: { createdAt: "asc" },
     });
+
+    // Deduplicate approved teams:
+    // 1. Exclude phantom rows with 0 members
+    // 2. Exclude identical duplicates (same projectId + same student roster)
+    const validApprovedTeams = [];
+    const seenRosterKeys = new Set();
+
+    for (const team of allApprovedTeams) {
+      if (!team.members || team.members.length === 0) {
+        continue; // Ignore phantom/empty team records
+      }
+
+      const rosterKey = `${team.projectId}_${team.members
+        .map((m) => (m.regNo || "").trim().toUpperCase())
+        .sort()
+        .join("_")}`;
+
+      if (seenRosterKeys.has(rosterKey)) {
+        continue; // Ignore duplicate clone
+      }
+      seenRosterKeys.add(rosterKey);
+      validApprovedTeams.push(team);
+    }
+
+    const groupApplications = validApprovedTeams.filter((t) => t.applicationType === "group");
+    const individualApplications = validApprovedTeams.filter((t) => t.applicationType === "individual");
+
     const groupDetails = groupApplications.map((group) => {
       const project = projects.find((p) => p.id === group.projectId || p._id === group.projectId);
       const teacher = teachers.find((t) => t.id === project?.teacherId || t._id === project?.teacherId);
@@ -62,13 +79,23 @@ export const getStatistics = async (req, res) => {
       };
     });
 
+    // Track all students with active applications or in approved teams
+    const appliedStudentIds = new Set();
+    applications.forEach((app) => {
+      app.members.forEach((m) => appliedStudentIds.add(m.studentId));
+    });
+    validApprovedTeams.forEach((team) => {
+      team.members.forEach((m) => appliedStudentIds.add(m.studentId));
+    });
+
+    const studentsWithApplications = students.filter((s) => appliedStudentIds.has(s.id));
+    const studentsWithoutApplications = students.filter((s) => !appliedStudentIds.has(s.id));
+
     const teacherCount = teachers.length;
     const studentCount = students.length;
     const projectCount = projects.length;
     const groupCount = groupApplications.length;
-    const individualCount = await prisma.teamApproved.count({
-      where: { applicationType: "individual" },
-    });
+    const individualCount = individualApplications.length;
 
     const applicationCount = applications.length + groupCount + individualCount;
 
@@ -83,7 +110,7 @@ export const getStatistics = async (req, res) => {
       teachersWithProjects: teachersWithProjects.map((t) => ({
         name: t.fullName,
         email: t.email,
-        projects: teacherIdToProjects[t.id] || [],
+        projects: Array.from(new Set(teacherIdToProjects[t.id] || [])),
       })),
       teachersWithoutProjects: teachersWithoutProjects.map((t) => ({
         name: t.fullName,

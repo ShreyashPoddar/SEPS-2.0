@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "react-hot-toast";
+import showToast from "../utils/toastUtils";
 import {
   X,
   Users,
@@ -49,6 +49,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
   const [activeSlot, setActiveSlot] = useState(null);
   const [searchResults, setSearchResults] = useState({ 1: [], 2: [] });
   const [isSearching, setIsSearching] = useState({ 1: false, 2: false });
+  const [searchErrors, setSearchErrors] = useState({ 1: null, 2: null });
   const [filterMatchingCohortOnly, setFilterMatchingCohortOnly] = useState(true);
   const [acknowledgedCrossBranch, setAcknowledgedCrossBranch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,21 +58,30 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
   const debouncedQuery1 = useDebounce(teammates[0].query, 250);
   const debouncedQuery2 = useDebounce(teammates[1].query, 250);
 
+  const otherSlotStudent2RegNo = teammates[1]?.student?.regNo;
+  const otherSlotStudent1RegNo = teammates[0]?.student?.regNo;
+
   // Perform search for slot 1
   useEffect(() => {
-    if (!debouncedQuery1 || debouncedQuery1.trim().length < 2) {
+    let isCancelled = false;
+    const query = debouncedQuery1?.trim();
+    if (!query || query.length < 2) {
       setSearchResults((prev) => ({ ...prev, 1: [] }));
+      setSearchErrors((prev) => ({ ...prev, 1: null }));
       return;
     }
     setIsSearching((prev) => ({ ...prev, 1: true }));
-    searchStudents(debouncedQuery1.trim())
+    setSearchErrors((prev) => ({ ...prev, 1: null }));
+
+    searchStudents(query)
       .then((res) => {
-        let list = res.data || [];
+        if (isCancelled) return;
+        let list = Array.isArray(res.data) ? res.data : [];
         // Filter out leader
         list = list.filter((s) => s.regNo?.toLowerCase() !== leader.regNo?.toLowerCase());
         // Filter out slot 2 if selected
-        if (teammates[1].student) {
-          list = list.filter((s) => s.regNo !== teammates[1].student.regNo);
+        if (otherSlotStudent2RegNo) {
+          list = list.filter((s) => s.regNo?.toLowerCase() !== otherSlotStudent2RegNo.toLowerCase());
         }
         // Cohort filter if checked
         if (filterMatchingCohortOnly) {
@@ -79,25 +89,46 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
         }
         setSearchResults((prev) => ({ ...prev, 1: list }));
       })
-      .catch(() => toast.error("Student search failed"))
-      .finally(() => setIsSearching((prev) => ({ ...prev, 1: false })));
-  }, [debouncedQuery1, filterMatchingCohortOnly, leader.regNo, leaderCohort, teammates]);
+      .catch(() => {
+        if (isCancelled) return;
+        setSearchResults((prev) => ({ ...prev, 1: [] }));
+        setSearchErrors((prev) => ({
+          ...prev,
+          1: "Search unavailable. You can enter register number directly.",
+        }));
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsSearching((prev) => ({ ...prev, 1: false }));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [debouncedQuery1, filterMatchingCohortOnly, leader.regNo, leaderCohort, otherSlotStudent2RegNo]);
 
   // Perform search for slot 2
   useEffect(() => {
-    if (!debouncedQuery2 || debouncedQuery2.trim().length < 2) {
+    let isCancelled = false;
+    const query = debouncedQuery2?.trim();
+    if (!query || query.length < 2) {
       setSearchResults((prev) => ({ ...prev, 2: [] }));
+      setSearchErrors((prev) => ({ ...prev, 2: null }));
       return;
     }
     setIsSearching((prev) => ({ ...prev, 2: true }));
-    searchStudents(debouncedQuery2.trim())
+    setSearchErrors((prev) => ({ ...prev, 2: null }));
+
+    searchStudents(query)
       .then((res) => {
-        let list = res.data || [];
+        if (isCancelled) return;
+        let list = Array.isArray(res.data) ? res.data : [];
         // Filter out leader
         list = list.filter((s) => s.regNo?.toLowerCase() !== leader.regNo?.toLowerCase());
         // Filter out slot 1 if selected
-        if (teammates[0].student) {
-          list = list.filter((s) => s.regNo !== teammates[0].student.regNo);
+        if (otherSlotStudent1RegNo) {
+          list = list.filter((s) => s.regNo?.toLowerCase() !== otherSlotStudent1RegNo.toLowerCase());
         }
         // Cohort filter if checked
         if (filterMatchingCohortOnly) {
@@ -105,9 +136,24 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
         }
         setSearchResults((prev) => ({ ...prev, 2: list }));
       })
-      .catch(() => toast.error("Student search failed"))
-      .finally(() => setIsSearching((prev) => ({ ...prev, 2: false })));
-  }, [debouncedQuery2, filterMatchingCohortOnly, leader.regNo, leaderCohort, teammates]);
+      .catch(() => {
+        if (isCancelled) return;
+        setSearchResults((prev) => ({ ...prev, 2: [] }));
+        setSearchErrors((prev) => ({
+          ...prev,
+          2: "Search unavailable. You can enter register number directly.",
+        }));
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsSearching((prev) => ({ ...prev, 2: false }));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [debouncedQuery2, filterMatchingCohortOnly, leader.regNo, leaderCohort, otherSlotStudent1RegNo]);
 
   const handleSelectStudent = (slotNumber, student) => {
     setTeammates((prev) =>
@@ -186,19 +232,19 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
 
   const handleSubmit = async () => {
     if (totalMembersCount < 2 || totalMembersCount > 3) {
-      toast.error("Requirement: The team must consist of either 2 or 3 members (Leader + 1 or 2 teammates) before applying.");
+      showToast.error("Requirement: The team must consist of either 2 or 3 members (Leader + 1 or 2 teammates) before applying.");
       return;
     }
 
     if (cohortConflictInfo.hasConflict) {
-      toast.error(
+      showToast.error(
         "Cannot submit! All team members must belong to the exact same internship cohort track."
       );
       return;
     }
 
     if (crossBranchInfo.hasCrossBranch && !acknowledgedCrossBranch) {
-      toast.error(
+      showToast.error(
         "Please acknowledge the cross-branch major project registration warning."
       );
       return;
@@ -233,14 +279,14 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
 
     try {
       const res = await applyToProject(applicationPayload);
-      toast.success(res.data?.message || "Application submitted successfully!");
+      showToast.success(res.data?.message || "Application submitted successfully!");
       if (res.data?.warning) {
-        toast(res.data.warning, { icon: "⚠️", duration: 6000 });
+        showToast.info(res.data.warning, { icon: "⚠️", duration: 6000 });
       }
       if (onApplySuccess) onApplySuccess(project._id);
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to submit project application.");
+      showToast.error(err, { fallback: "Failed to submit project application. Please check your connection." });
     } finally {
       setIsSubmitting(false);
     }
@@ -598,13 +644,22 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                         </div>
 
                         {/* Search Dropdown */}
-                        {activeSlot === slotNum && item.query.length >= 2 && (
+                        {activeSlot === slotNum && item.query.trim().length >= 2 && (
                           <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-slate-900 rounded-2xl shadow-xl z-30 max-h-56 overflow-y-auto p-1.5 space-y-1">
-                            {searchResults[slotNum].length === 0 && !isSearching[slotNum] && (
-                              <div className="p-3 text-center text-xs text-slate-500 font-medium">
-                                No eligible students found.
+                            {isSearching[slotNum] ? (
+                              <div className="p-3 text-center text-xs text-slate-500 font-medium flex items-center justify-center gap-2">
+                                <LoadingSpinner size="xs" />
+                                <span>Searching students...</span>
                               </div>
-                            )}
+                            ) : searchErrors[slotNum] ? (
+                              <div className="p-3 text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl font-medium">
+                                {searchErrors[slotNum]}
+                              </div>
+                            ) : searchResults[slotNum].length === 0 ? (
+                              <div className="p-3 text-center text-xs text-slate-500 font-medium">
+                                No eligible students found matching &quot;{item.query}&quot;.
+                              </div>
+                            ) : null}
 
                             {searchResults[slotNum].map((cand) => {
                               const candTrack = cand.internshipStatus || "regular";

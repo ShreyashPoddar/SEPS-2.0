@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { signupUser, getCurrentUser } from "../api.js";
-import { toast, Toaster } from "react-hot-toast";
+import showToast from "../utils/toastUtils.js";
 import { UserPlus, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import SlicedWaves from "../components/SlicedWaves";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -56,13 +56,13 @@ export default function Signup() {
       dataToSend.internshipStatus = formData.internshipStatus || "regular";
     }
 
-    toast.promise(
+    showToast.promise(
       signupUser(dataToSend),
       {
         loading: "Creating your account...",
         success: (res) => {
           setTimeout(() => navigate("/login"), 2000);
-          return res.data.message || "Signup successful! Please verify your email.";
+          return res.data?.message || "Signup successful! Please verify your email.";
         },
         error: (err) => err.response?.data?.message || "Signup failed. Please try again.",
       }
@@ -71,7 +71,6 @@ export default function Signup() {
 
   return (
     <div className="relative min-h-screen w-full bg-white text-slate-900 flex items-center justify-center p-4 overflow-hidden selection:bg-blue-600 selection:text-white">
-      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
 
       {/* SlicedWaves Background */}
       <div className="fixed inset-0 w-full h-full z-0 pointer-events-auto">
