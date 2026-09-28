@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import {
-  Loader,
   Ticket,
   Inbox,
   CheckCircle2,
@@ -434,7 +433,7 @@ export default function TeacherTickets() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
       <div className="relative max-w-5xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar user={user} handleLogout={handleLogout} />
 

@@ -18,6 +18,7 @@ import MyTeams from "./pages/MyTeams.jsx";
 import SetGlobalDeadline from "./pages/SetGlobalDeadline.jsx";
 import StatisticsReport from "./pages/StatisticsReport.jsx";
 import TeacherTickets from "./pages/TeacherTickets.jsx";
+import LoadingSpinner from "./components/LoadingSpinner.jsx";
 import { useEffect, useState } from "react";
 
 import { getCurrentUser } from "./api";
@@ -25,9 +26,18 @@ import { getCurrentUser } from "./api";
 // Wrapper to inject user prop from getCurrentUser API
 function SetGlobalDeadlineWrapper() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    getCurrentUser().then(res => setUser(res.data)).catch(() => setUser(null));
+    getCurrentUser()
+      .then(res => setUser(res.data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return <LoadingSpinner fullScreen text="Verifying Coordinator Authorization..." />;
+  }
+
   return <SetGlobalDeadline user={user} />;
 }
 

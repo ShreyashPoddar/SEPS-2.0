@@ -1,13 +1,15 @@
 import React from "react";
 
 /**
- * LoadingSpinner component inspired by the Lottie animation "loading-WEOp0qe5kL":
+ * LoadingSpinner component recreating the Lottie animation "loading-WEOp0qe5kL":
  * 5 concentric rings of pulsating, rotating circular beads in vibrant Yellow and Blueish tones.
- * Ultra-smooth, GPU-accelerated SVG with zero external dependencies and 60fps rendering.
+ * Each ring features its own distinct saturated hue to eliminate optical color blending/grey wash,
+ * with orbital counter-rotations and traveling light-wave breathing pulses.
+ * 100% lightweight SVG, GPU-accelerated 60 FPS, with zero external dependencies.
  */
 export default function LoadingSpinner({
   size = "md",
-  color = null, // If null, renders in radiant yellow & blueish tones
+  color = null, // If specified, applies monochromatic tint (with opacity gradients)
   text = "",
   fullScreen = false,
   className = "",
@@ -19,75 +21,86 @@ export default function LoadingSpinner({
     md: 48,
     lg: 72,
     xl: 96,
+    "2xl": 120,
   };
 
-  const pixelSize = typeof size === "number" ? size : sizeMap[size] || 48;
+  // When fullScreen, default to prominent size (96px) unless an explicit size was provided
+  const pixelSize =
+    typeof size === "number"
+      ? size
+      : fullScreen && size === "md"
+      ? 96
+      : sizeMap[size] || 48;
 
-  // 5 concentric rings with yellow and blueish tones
-  // Alternating and orbital counter-rotations
+  // 5 concentric rings with pure, unmixed Yellow and Blueish tones
+  // Rings have distinct radii and alternating orbital rotations
   const rings = [
     {
-      radius: 40,
-      dots: 16,
-      dotR: 2.8,
-      duration: 3.2,
+      radius: 42,
+      dots: 22,
+      dotR: 2.7,
+      duration: 5.6,
       reverse: false,
-      colors: ["#007DFF", "#FFC700"], // Electric Blue & Sunlight Gold Yellow
+      color: "#007DFF", // Electric Royal Blue
       opacity: 1.0,
     },
     {
-      radius: 31,
-      dots: 12,
+      radius: 34,
+      dots: 18,
       dotR: 2.5,
-      duration: 2.6,
+      duration: 4.8,
       reverse: true,
-      colors: ["#F59E0B", "#0284C7"], // Warm Amber Gold & Deep Sky Blue
+      color: "#FFC700", // Sunlight Gold Yellow
+      opacity: 0.95,
+    },
+    {
+      radius: 26,
+      dots: 14,
+      dotR: 2.3,
+      duration: 4.0,
+      reverse: false,
+      color: "#00B4D8", // Cyan Sky Blue
       opacity: 0.9,
     },
     {
-      radius: 22,
-      dots: 8,
-      dotR: 2.3,
-      duration: 2.1,
-      reverse: false,
-      colors: ["#0EA5E9", "#FACC15"], // Cyan Blue & Bright Sun Yellow
-      opacity: 0.82,
-    },
-    {
-      radius: 14,
-      dots: 6,
-      dotR: 2.0,
-      duration: 1.6,
+      radius: 18,
+      dots: 10,
+      dotR: 2.1,
+      duration: 3.2,
       reverse: true,
-      colors: ["#FFD000", "#2563EB"], // Radiant Yellow & Royal Indigo Blue
-      opacity: 0.72,
+      color: "#FF9E00", // Warm Honey Amber Yellow
+      opacity: 0.85,
     },
     {
-      radius: 6,
-      dots: 4,
-      dotR: 1.8,
-      duration: 1.2,
+      radius: 10,
+      dots: 6,
+      dotR: 1.9,
+      duration: 2.4,
       reverse: false,
-      colors: ["#38BDF8", "#F59E0B"], // Soft Sky Blue & Honey Yellow
-      opacity: 0.65,
+      color: "#3A86FF", // Radiant Deep Indigo Blue
+      opacity: 0.8,
     },
   ];
 
   const spinnerContent = (
-    <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
+    <div className={`flex flex-col items-center justify-center gap-3.5 ${className}`}>
       <style>
         {`
-          @keyframes lottieConcentricSpin {
+          @keyframes lottieRingOrbitCW {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-          @keyframes lottiePulseRing {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.06); }
+          @keyframes lottieRingOrbitCCW {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
           }
-          @keyframes lottieCenterPulse {
-            0%, 100% { transform: scale(0.85); opacity: 0.75; }
-            50% { transform: scale(1.25); opacity: 1; }
+          @keyframes lottieDotBreathe {
+            0%, 100% { transform: scale(0.85); opacity: 0.6; }
+            50% { transform: scale(1.18); opacity: 1; }
+          }
+          @keyframes lottieCenterBead {
+            0%, 100% { transform: scale(0.85); filter: drop-shadow(0 0 2px rgba(255, 199, 0, 0.4)); }
+            50% { transform: scale(1.25); filter: drop-shadow(0 0 6px rgba(255, 199, 0, 0.9)); }
           }
         `}
       </style>
@@ -104,10 +117,6 @@ export default function LoadingSpinner({
         <svg
           viewBox="0 0 100 100"
           className="w-full h-full overflow-visible"
-          style={{
-            animation: "lottiePulseRing 3s ease-in-out infinite",
-            transformOrigin: "50% 50%",
-          }}
         >
           {rings.map((ring, rIdx) => {
             const dots = [];
@@ -115,9 +124,8 @@ export default function LoadingSpinner({
               const angle = (i * 2 * Math.PI) / ring.dots;
               const cx = 50 + ring.radius * Math.cos(angle);
               const cy = 50 + ring.radius * Math.sin(angle);
-              const dotColor = color
-                ? color
-                : ring.colors[i % ring.colors.length];
+              const dotFill = color || ring.color;
+              const delay = -((i / ring.dots) * 2).toFixed(2);
 
               dots.push(
                 <circle
@@ -125,7 +133,13 @@ export default function LoadingSpinner({
                   cx={cx}
                   cy={cy}
                   r={ring.dotR}
-                  fill={dotColor}
+                  fill={dotFill}
+                  style={{
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    animation: `lottieDotBreathe 2.4s ease-in-out infinite`,
+                    animationDelay: `${delay}s`,
+                  }}
                   opacity={ring.opacity}
                 />
               );
@@ -135,10 +149,11 @@ export default function LoadingSpinner({
               <g
                 key={rIdx}
                 style={{
+                  transformBox: "view-box",
                   transformOrigin: "50px 50px",
-                  animation: `lottieConcentricSpin ${ring.duration}s linear infinite ${
-                    ring.reverse ? "reverse" : "normal"
-                  }`,
+                  animation: `${ring.reverse ? "lottieRingOrbitCCW" : "lottieRingOrbitCW"} ${
+                    ring.duration
+                  }s linear infinite`,
                 }}
               >
                 {dots}
@@ -146,23 +161,24 @@ export default function LoadingSpinner({
             );
           })}
 
-          {/* Central Pulsing Bead (Yellow Core) */}
+          {/* Central Pulsating Golden Bead */}
           <circle
             cx={50}
             cy={50}
-            r={2.2}
+            r={2.6}
             fill={color || "#FFD000"}
             style={{
-              animation: "lottieCenterPulse 1.6s ease-in-out infinite",
-              transformOrigin: "50% 50%",
+              transformBox: "fill-box",
+              transformOrigin: "center",
+              animation: "lottieCenterBead 1.8s ease-in-out infinite",
             }}
           />
         </svg>
       </div>
 
       {text && (
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+        <div className="flex items-center gap-2 mt-1">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
           <p className="text-xs sm:text-sm font-extrabold text-slate-800 tracking-wide">
             {text}
           </p>
@@ -174,7 +190,7 @@ export default function LoadingSpinner({
   if (fullScreen) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white/95 backdrop-blur-md p-8 sm:p-10 rounded-3xl border-2 border-slate-900 shadow-2xl flex flex-col items-center">
+        <div className="bg-white/95 backdrop-blur-md p-8 sm:p-12 rounded-3xl border-2 border-slate-900 shadow-2xl flex flex-col items-center max-w-sm w-full mx-auto">
           {spinnerContent}
         </div>
       </div>

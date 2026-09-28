@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getCurrentUser, updateProfile, logoutUser } from "../api";
 import { useNavigate } from "react-router-dom";
-import { Loader, Save, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -421,7 +421,7 @@ export default function TeacherProfile() {
               >
                 {saving ? (
                   <>
-                    <Loader className="animate-spin w-5 h-5" /> Saving...
+                    <LoadingSpinner size="xs" color="#ffffff" /> Saving...
                   </>
                 ) : (
                   <>

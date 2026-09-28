@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getCurrentUser, updateProfile, logoutUser, isStudentProfileComplete } from "../api";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader, Save, AlertCircle, CheckCircle, ExternalLink, ArrowRight, Phone } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, ExternalLink, ArrowRight, Phone } from 'lucide-react';
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { getStudentDisplayDepartment } from "../utils/departmentUtils";
@@ -802,7 +802,7 @@ export default function StudentProfile() {
               >
                 {saving ? (
                   <>
-                    <Loader className="animate-spin w-5 h-5" />
+                    <LoadingSpinner size="xs" color="#ffffff" />
                     <span>Saving in database...</span>
                   </>
                 ) : (

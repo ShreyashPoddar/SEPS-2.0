@@ -18,6 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import SlicedWaves from "../components/SlicedWaves";
+import LoadingSpinner from "../components/LoadingSpinner";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
 
 export default function Login() {
@@ -252,8 +253,17 @@ export default function Login() {
                 whileTap={{ scale: 0.98 }}
                 className="w-full flex justify-center items-center gap-2 py-3 px-4 bg-slate-950 hover:bg-slate-800 text-white font-bold rounded-full border-2 border-black shadow-lg shadow-black/10 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer"
               >
-                {loading ? "Checking ID..." : "Continue"}
-                {!loading && <ArrowRight size={16} />}
+                {loading ? (
+                  <>
+                    <LoadingSpinner size="xs" color="#ffffff" />
+                    <span>Checking ID...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Continue</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
               </motion.button>
             </motion.form>
           )}
@@ -347,8 +357,17 @@ export default function Login() {
                   whileTap={{ scale: 0.98 }}
                   className="w-full flex justify-center items-center gap-2 py-3 px-4 bg-slate-950 hover:bg-slate-800 text-white font-bold rounded-full border-2 border-black shadow-lg shadow-black/10 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer"
                 >
-                  {loading ? "Signing in..." : "Sign In to Portal"}
-                  {!loading && <LogIn size={16} />}
+                  {loading ? (
+                    <>
+                      <LoadingSpinner size="xs" color="#ffffff" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Sign In to Portal</span>
+                      <LogIn size={16} />
+                    </>
+                  )}
                 </motion.button>
 
                 <div className="text-center pt-1">

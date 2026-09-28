@@ -14,7 +14,6 @@ import {
   User,
   Users,
   Calendar,
-  Loader2,
   Check,
   CheckCircle,
   X,
@@ -111,7 +110,7 @@ export default function TeacherApplications() {
     <div className="min-h-screen bg-slate-100 text-gray-800">
       <Toaster
         position="top-right"
-        toastOptions={{ className: "bg-slate-700 text-white" }}
+        toastOptions={{ className: "bg-slate-700 text-white", loading: { icon: <LoadingSpinner size="xs" /> } }}
       />
       <div className="relative max-w-7xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar
