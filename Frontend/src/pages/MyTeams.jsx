@@ -10,7 +10,7 @@ import {
   getStudentInfo, // Assuming search is by RegNo
 } from "../api";
 import { toast, Toaster } from "react-hot-toast";
-import { Loader, Users, Inbox, X, Plus, Search, FileText } from "lucide-react";
+import { Users, Inbox, X, Plus, Search, FileText } from "lucide-react";
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -146,7 +146,7 @@ export default function MyTeams() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
       <div className="relative max-w-6xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar user={user} handleLogout={handleLogout} />
 
@@ -307,7 +307,7 @@ export default function MyTeams() {
                 className="p-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-white disabled:opacity-50"
               >
                 {isSearching ? (
-                  <Loader className="w-5 h-5 animate-spin" />
+                  <LoadingSpinner size="xs" color="#ffffff" />
                 ) : (
                   <Search className="w-5 h-5" />
                 )}

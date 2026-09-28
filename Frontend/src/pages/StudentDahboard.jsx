@@ -294,9 +294,13 @@ export default function StudentDashboard() {
       vacancyFilter !== "all"
   );
 
+  if (!user && loading) {
+    return <LoadingSpinner fullScreen text="Loading Student Portal & Project Directory..." />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 pb-16">
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
 
       {/* Apply Modal */}
       {selectedProject && (
@@ -681,7 +685,7 @@ export default function StudentDashboard() {
         <div className="mt-8">
           {loading ? (
             <div className="p-16 bg-white rounded-3xl border-2 border-slate-900 text-center flex items-center justify-center">
-              <LoadingSpinner size="lg" text="Loading major project directory..." />
+              <LoadingSpinner size="xl" text="Loading major project directory..." />
             </div>
           ) : projects.length === 0 ? (
             /* Empty state when NO projects exist in the portal */

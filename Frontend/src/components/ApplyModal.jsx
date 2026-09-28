@@ -5,7 +5,6 @@ import {
   X,
   Users,
   Search,
-  Loader2,
   AlertTriangle,
   ShieldAlert,
   CheckCircle2,
@@ -19,6 +18,7 @@ import {
   Filter,
   Phone,
 } from "lucide-react";
+import LoadingSpinner from "./LoadingSpinner";
 import { searchStudents, applyToProject } from "../api";
 
 // Debounce helper
@@ -591,7 +591,9 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
                             className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:border-slate-950 focus:bg-white transition"
                           />
                           {isSearching[slotNum] && (
-                            <Loader2 className="absolute right-3 w-4 h-4 animate-spin text-slate-500" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
+                              <LoadingSpinner size="xs" />
+                            </span>
                           )}
                         </div>
 
@@ -701,7 +703,7 @@ export default function ApplyModal({ project, currentUser, nextPriority = 1, onC
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <LoadingSpinner size="xs" color="#ffffff" />
                 <span>Submitting Application...</span>
               </>
             ) : totalMembersCount < 2 ? (

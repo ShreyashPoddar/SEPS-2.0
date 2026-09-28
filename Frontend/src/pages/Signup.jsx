@@ -5,6 +5,7 @@ import { signupUser, getCurrentUser } from "../api.js";
 import { toast, Toaster } from "react-hot-toast";
 import { UserPlus, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import SlicedWaves from "../components/SlicedWaves";
+import LoadingSpinner from "../components/LoadingSpinner";
 import srmLogo from "../assets/SRM_Institute_of_Science_and_Technology_Logo.svg.png";
 
 export default function Signup() {
@@ -70,7 +71,7 @@ export default function Signup() {
 
   return (
     <div className="relative min-h-screen w-full bg-white text-slate-900 flex items-center justify-center p-4 overflow-hidden selection:bg-blue-600 selection:text-white">
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ loading: { icon: <LoadingSpinner size="xs" /> } }} />
 
       {/* SlicedWaves Background */}
       <div className="fixed inset-0 w-full h-full z-0 pointer-events-auto">
@@ -303,8 +304,17 @@ export default function Signup() {
             whileTap={{ scale: 0.98 }}
             className="w-full flex justify-center items-center gap-2 py-3 px-4 bg-slate-950 hover:bg-slate-800 text-white font-bold rounded-full border-2 border-black shadow-lg shadow-black/10 transition active:scale-95 disabled:opacity-50 text-sm mt-2"
           >
-            {loading ? "Creating Account..." : "Create Account"}
-            {!loading && <UserPlus size={16} />}
+            {loading ? (
+              <>
+                <LoadingSpinner size="xs" color="#ffffff" />
+                <span>Creating Account...</span>
+              </>
+            ) : (
+              <>
+                <span>Create Account</span>
+                <UserPlus size={16} />
+              </>
+            )}
           </motion.button>
         </form>
 
