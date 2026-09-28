@@ -9,7 +9,6 @@ import {
   UserMinus,
   Edit3,
   Search,
-  Loader2,
   Building2,
   Briefcase,
   GraduationCap,
@@ -19,6 +18,7 @@ import {
   FileCheck,
   XCircle,
 } from "lucide-react";
+import LoadingSpinner from "./LoadingSpinner";
 import { searchStudents, raiseChangeTicket } from "../api";
 
 const useDebounce = (value, delay) => {
@@ -428,7 +428,9 @@ export default function ChangeTicketModal({
                         className="w-full pl-9 pr-8 py-2.5 bg-white border-2 border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:border-black"
                       />
                       {isSearching && (
-                        <Loader2 className="absolute right-3 w-4 h-4 animate-spin text-slate-500" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
+                          <LoadingSpinner size="xs" />
+                        </span>
                       )}
                     </div>
 
@@ -586,7 +588,7 @@ export default function ChangeTicketModal({
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <LoadingSpinner size="xs" color="#ffffff" />
                   <span>Submitting Ticket...</span>
                 </>
               ) : (
