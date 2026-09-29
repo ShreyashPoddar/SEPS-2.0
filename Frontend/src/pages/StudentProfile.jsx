@@ -334,7 +334,7 @@ export default function StudentProfile() {
                     {profile.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
                   </p>
                   <p className="text-[11px] text-slate-600 font-medium truncate">
-                    {profile.departmentRel?.hod?.email || "hodece@srmist.edu.in"}
+                    {profile.departmentRel?.hod?.email || ""}
                   </p>
                 </div>
               </div>

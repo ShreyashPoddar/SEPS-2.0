@@ -52,9 +52,8 @@ export default function Navbar({ user, handleLogout, notificationCount = 0, pend
         {user?.role === 'teacher' && [
           "sangeetm@srmist.edu.in",
           "vadivukk@srmist.edu.in",
-          "elavelvg@srmist.edu.in",
-          "hodece@srmist.edu.in"
-        ].includes(user.email) && (
+          "elavelvg@srmist.edu.in"
+        ].some((adm) => adm.toLowerCase() === (user.email || "").trim().toLowerCase()) && (
           <Link 
             to="/teacher/statistics-report"
             className="hidden sm:flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-900 border-2 border-slate-900 rounded-full shadow-sm text-xs font-bold transition"

@@ -5,6 +5,15 @@ const memberOrder = { orderBy: { createdAt: "asc" } };
 
 export const applyToProject = async (req, res) => {
   try {
+    // 0. Verify if the major project registration deadline has passed
+    const deadlineDoc = await prisma.globalDeadline.findFirst();
+    if (deadlineDoc?.deadline && new Date() > new Date(deadlineDoc.deadline)) {
+      return res.status(400).json({
+        message:
+          "The major project registration window has closed. The deadline has passed. Please contact the project coordinators if you require an extension.",
+      });
+    }
+
     const { projectId, members } = req.body;
     const applicationType = "group";
     const leader = req.user;

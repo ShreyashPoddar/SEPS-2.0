@@ -92,7 +92,6 @@ const ALLOWED_ADMIN_EMAILS = [
   "sangeetm@srmist.edu.in",
   "vadivukk@srmist.edu.in",
   "elavelvg@srmist.edu.in",
-  "hodece@srmist.edu.in",
 ];
 
 export default function TeacherDashboard() {
@@ -452,7 +451,7 @@ export default function TeacherDashboard() {
         )}
 
         {/* Coordinator Controls for Allowed Teachers / Admins */}
-        {user && ALLOWED_ADMIN_EMAILS.includes(user.email) && (
+        {user && ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === (user.email || "").trim().toLowerCase()) && (
           <div className="mb-6 flex justify-end gap-3 flex-wrap">
             <button
               onClick={() => navigate("/teacher/set-global-deadline")}

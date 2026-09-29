@@ -1,7 +1,7 @@
 // controllers/globalDeadline.controller.js
 import prisma from "../lib/db.js";
 
-const allowedEmails = [
+export const ALLOWED_ADMIN_EMAILS = [
   "sangeetm@srmist.edu.in",
   "vadivukk@srmist.edu.in",
   "elavelvg@srmist.edu.in",
@@ -21,27 +21,45 @@ export const getGlobalDeadline = async (req, res) => {
 
 export const setGlobalDeadline = async (req, res) => {
   try {
-    if (!allowedEmails.includes(req.user.email)) {
-      return res.status(403).json({ message: "Not authorized." });
+    const userEmail = (req.user?.email || "").trim().toLowerCase();
+    const isAuthorized =
+      req.user?.role === "teacher" &&
+      ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail);
+
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Not authorized. Admin faculty access required." });
     }
+
     const { deadline } = req.body;
     if (!deadline) {
       return res.status(400).json({ message: "Deadline is required." });
+    }
+
+    // If input is YYYY-MM-DD, set deadline to 23:59:59 end-of-day
+    let parsedDate;
+    if (typeof deadline === "string" && /^\d{4}-\d{2}-\d{2}$/.test(deadline.trim())) {
+      parsedDate = new Date(`${deadline.trim()}T23:59:59.999Z`);
+    } else {
+      parsedDate = new Date(deadline);
+    }
+
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date format provided." });
     }
 
     let deadlineDoc = await prisma.globalDeadline.findFirst();
     if (deadlineDoc) {
       deadlineDoc = await prisma.globalDeadline.update({
         where: { id: deadlineDoc.id },
-        data: { deadline: new Date(deadline) },
+        data: { deadline: parsedDate },
       });
     } else {
       deadlineDoc = await prisma.globalDeadline.create({
-        data: { deadline: new Date(deadline) },
+        data: { deadline: parsedDate },
       });
     }
 
-    res.status(200).json({ message: "Global deadline updated.", deadline: deadlineDoc.deadline });
+    res.status(200).json({ message: "Global deadline updated successfully.", deadline: deadlineDoc.deadline });
   } catch (error) {
     res.status(500).json({ message: "Error setting global deadline.", error: error.message });
   }

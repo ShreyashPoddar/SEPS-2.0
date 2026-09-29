@@ -42,6 +42,7 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [globalDeadline, setGlobalDeadline] = useState("");
+  const [rawDeadline, setRawDeadline] = useState("");
   const [user, setUser] = useState(null);
   const [myApplications, setMyApplications] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -53,6 +54,12 @@ export default function StudentDashboard() {
   const [selectedDomains, setSelectedDomains] = useState([]);
   const [selectedFaculty, setSelectedFaculty] = useState("all");
   const [selectedStream, setSelectedStream] = useState("all");
+
+  const isDeadlinePassed = useMemo(() => {
+    if (!rawDeadline) return false;
+    const d = new Date(rawDeadline);
+    return !isNaN(d.getTime()) && new Date() > d;
+  }, [rawDeadline]);
   const [vacancyFilter, setVacancyFilter] = useState("all"); // 'all' | 'available_only'
   const [sortBy, setSortBy] = useState("newest"); // 'newest' | 'title_asc' | 'title_desc' | 'faculty' | 'vacancies'
 
@@ -128,6 +135,7 @@ export default function StudentDashboard() {
     getGlobalDeadline()
       .then((res) => {
         if (res.data?.deadline) {
+          setRawDeadline(res.data.deadline);
           setGlobalDeadline(
             new Date(res.data.deadline).toLocaleDateString("en-US", {
               month: "short",
@@ -137,7 +145,10 @@ export default function StudentDashboard() {
           );
         }
       })
-      .catch(() => setGlobalDeadline(""));
+      .catch(() => {
+        setRawDeadline("");
+        setGlobalDeadline("");
+      });
   }, [navigate, fetchInvitations, loadProjects]);
 
   // Extract distinct faculties from current projects for dynamic filter dropdown
@@ -325,18 +336,27 @@ export default function StudentDashboard() {
 
         {/* Global Deadline Banner */}
         {globalDeadline && (
-          <div className="mb-8 p-4 rounded-2xl bg-white border-2 border-slate-900 shadow-md flex items-center justify-between flex-wrap gap-3">
+          <div className={`mb-8 p-4 rounded-2xl bg-white border-2 ${isDeadlinePassed ? "border-red-400 bg-red-50/20" : "border-slate-900"} shadow-md flex items-center justify-between flex-wrap gap-3`}>
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-slate-950 text-cyan-400">
+              <div className={`p-2 rounded-xl ${isDeadlinePassed ? "bg-red-600 text-white" : "bg-slate-950 text-cyan-400"}`}>
                 <Calendar className="w-5 h-5" />
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Centralized Major Project Allocation Window
                 </p>
-                <h4 className="text-sm font-extrabold text-slate-950">
-                  Global Registration Deadline:{" "}
-                  <span className="text-cyan-700">{globalDeadline}</span>
+                <h4 className="text-sm font-extrabold text-slate-950 flex items-center gap-2 flex-wrap">
+                  <span>Global Registration Deadline:</span>
+                  <span className={isDeadlinePassed ? "text-red-600 font-black" : "text-cyan-700"}>{globalDeadline}</span>
+                  {isDeadlinePassed ? (
+                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300">
+                      Registration Closed
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Open
+                    </span>
+                  )}
                 </h4>
               </div>
             </div>
@@ -413,7 +433,7 @@ export default function StudentDashboard() {
                       {user.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium truncate">
-                      {user.departmentRel?.hod?.email || "hodece@srmist.edu.in"}
+                      {user.departmentRel?.hod?.email || ""}
                     </p>
                   </div>
                 </div>
@@ -803,12 +823,14 @@ export default function StudentDashboard() {
                     <button
                       type="button"
                       onClick={() => setSelectedProject(p)}
-                      disabled={isApplied || hasReachedMaxLimit || isAllocated}
+                      disabled={isApplied || hasReachedMaxLimit || isAllocated || isDeadlinePassed}
                       className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-full font-extrabold text-xs sm:text-sm border-2 border-black transition shadow-md ${
                         isApplied
                           ? "bg-emerald-50 text-emerald-900 border-emerald-500 cursor-not-allowed"
                           : hasReachedMaxLimit || isAllocated
                           ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed"
+                          : isDeadlinePassed
+                          ? "bg-red-50 text-red-700 border-red-300 cursor-not-allowed"
                           : "bg-slate-950 hover:bg-slate-800 text-white hover:scale-102 active:scale-98"
                       }`}
                     >
@@ -826,6 +848,11 @@ export default function StudentDashboard() {
                         <>
                           <CheckCircle className="w-4 h-4 text-emerald-600" />
                           <span>Allocated to Project</span>
+                        </>
+                      ) : isDeadlinePassed ? (
+                        <>
+                          <Lock className="w-4 h-4 text-red-500" />
+                          <span>Registration Closed (Deadline Passed)</span>
                         </>
                       ) : (
                         <>

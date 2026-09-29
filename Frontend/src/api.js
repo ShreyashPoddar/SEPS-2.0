@@ -80,7 +80,7 @@ const initialProjects = [
     stream: "All Specializations",
     allowedStreams: ["All Specializations"],
     facultyName: "Dr. S. Ramesh Kumar",
-    facultyEmail: "hodece@srmist.edu.in",
+    facultyEmail: "ramesh.kumar@srmist.edu.in",
     vacancies: 2,
     prerequisites: "MATLAB, Wireless Channel Modeling, Linear Algebra",
     createdAt: new Date(Date.now() - 3600000 * 24 * 5).toISOString(),

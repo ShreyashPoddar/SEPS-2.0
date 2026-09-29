@@ -5,7 +5,6 @@ const ALLOWED_EMAILS = [
   "sangeetm@srmist.edu.in",
   "vadivukk@srmist.edu.in",
   "elavelvg@srmist.edu.in",
-  "hodece@srmist.edu.in",
 ];
 
 export const getStatistics = async (req, res) => {
