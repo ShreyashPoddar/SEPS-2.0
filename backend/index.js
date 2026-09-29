@@ -18,6 +18,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 import infoRoutes from "./routes/info.routes.js";
 import globalDeadlineRoutes from "./routes/globalDeadline.routes.js";
 import statisticsRoutes from "./routes/statistics.routes.js";
+import ticketRoutes from "./routes/ticket.routes.js";
 import quotaTokenRoutes from "./routes/projectquotatoken.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import rateLimit from "express-rate-limit";
