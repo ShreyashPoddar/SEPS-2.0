@@ -10,6 +10,7 @@ import {
   getFacultyTickets,
   getNotifications,
   getMyQuotaTokens,
+  getAllQuotaTokens,
 } from "../api";
 import { useNavigate } from "react-router-dom";
 import {
@@ -33,6 +34,7 @@ import {
   Sparkles,
   Globe,
   UserCheck,
+  ShieldCheck,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import SpecializationDropdown from "../components/SpecializationDropdown";
@@ -119,10 +121,17 @@ export default function TeacherDashboard() {
   const [notification, setNotification] = useState({ message: "", type: "" });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
+  const [pendingQuotaTokensCount, setPendingQuotaTokensCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
   const [quotaTokens, setQuotaTokens] = useState([]);
   const [isFlushModalOpen, setIsFlushModalOpen] = useState(false);
+
+  const isAdmin = useMemo(() => {
+    if (!user?.email) return false;
+    const email = user.email.toLowerCase().trim();
+    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+  }, [user]);
 
   const showNotification = (message, type = "error") => {
     setNotification({ message, type });
@@ -163,7 +172,7 @@ export default function TeacherDashboard() {
       });
   }, []);
 
-  const loadTicketsAndNotifications = useCallback(() => {
+  const loadTicketsAndNotifications = useCallback((currentUser) => {
     getFacultyTickets()
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : [];
@@ -178,6 +187,17 @@ export default function TeacherDashboard() {
         setNotificationCount(list.length);
       })
       .catch((err) => console.error("Error loading notifications:", err));
+
+    const email = (currentUser?.email || "").toLowerCase().trim();
+    if (ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email)) {
+      getAllQuotaTokens()
+        .then((res) => {
+          const list = Array.isArray(res.data?.tokens) ? res.data.tokens : [];
+          const pending = list.filter((t) => t.status === "pending").length;
+          setPendingQuotaTokensCount(pending);
+        })
+        .catch((err) => console.error("Error loading admin quota tokens:", err));
+    }
   }, []);
 
   useEffect(() => {
@@ -191,7 +211,7 @@ export default function TeacherDashboard() {
         setUser(currentUser);
         loadProjectsForCurrentUser();
         loadAllProjects();
-        loadTicketsAndNotifications();
+        loadTicketsAndNotifications(currentUser);
         loadQuotaTokens();
       })
       .catch((err) => {
@@ -394,8 +414,39 @@ export default function TeacherDashboard() {
           user={user}
           handleLogout={handleLogout}
           notificationCount={notificationCount}
-          pendingTicketsCount={pendingTicketsCount}
+          pendingTicketsCount={pendingTicketsCount + pendingQuotaTokensCount}
         />
+
+        {/* Admin Action Required: Pending Faculty Quota Requests Alert Banner */}
+        {isAdmin && pendingQuotaTokensCount > 0 && (
+          <div className="mb-8 p-5 rounded-3xl bg-cyan-50 border-2 border-cyan-400 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 rounded-2xl bg-cyan-600 text-white shadow-sm flex-shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-cyan-200 text-cyan-900 text-[10px] font-black uppercase tracking-wider">
+                    Admin Action Required
+                  </span>
+                  <h3 className="text-base sm:text-lg font-black text-slate-950">
+                    {pendingQuotaTokensCount} Pending Faculty Project Quota Request{pendingQuotaTokensCount > 1 ? "s" : ""}
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-700 font-medium mt-0.5">
+                  Faculty members have requested quota increases to propose additional major project topics.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate("/teacher/tickets?tab=admin_quota")}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md border-2 border-black transition active:scale-95 flex-shrink-0"
+            >
+              <span>Review & Approve Quotas ({pendingQuotaTokensCount})</span>
+              <ArrowRight className="w-4 h-4 text-cyan-400" />
+            </button>
+          </div>
+        )}
 
         {/* Action Required: Pending Change Tickets Alert Banner */}
         {pendingTicketsCount > 0 && (
@@ -495,7 +546,7 @@ export default function TeacherDashboard() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-700 font-medium mt-0.5">
-                  You requested permission to add <strong>+{pendingQuotaTokens[0]?.requestedProjects}</strong> more projects. Department coordinators have been notified.
+                  You requested permission to add <strong>+{pendingQuotaTokens[0]?.requestedProjects || 1}</strong> additional project. Department coordinators have been notified.
                 </p>
               </div>
             </div>

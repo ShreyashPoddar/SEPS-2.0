@@ -13,7 +13,7 @@ const API = axios.create({
         ? import.meta.env.VITE_API_URL.replace(/\/+$/, "")
         : `${import.meta.env.VITE_API_URL.replace(/\/+$/, "")}/api`)
     : import.meta.env.DEV
-    ? "http://localhost:10000/api"
+    ? "http://localhost:3050/api"
     : "/api",
   withCredentials: true,
   // Allow up to 30s for remote TiDB serverless wake-up latency

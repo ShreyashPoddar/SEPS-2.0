@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import {
   getPendingInvitations,
   respondToInvitation,
@@ -7,6 +7,8 @@ import {
   deleteNotification,
   getCurrentUser,
   logoutUser,
+  getFacultyTickets,
+  getAllQuotaTokens,
 } from "../api";
 import showToast from "../utils/toastUtils";
 import {
@@ -20,9 +22,18 @@ import {
   Info,
   Trash2,
   Phone,
+  ShieldCheck,
+  ArrowRight,
+  Ticket,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
+
+const ALLOWED_ADMIN_EMAILS = [
+  "sangeetm@srmist.edu.in",
+  "vadivukk@srmist.edu.in",
+  "elavelvg@srmist.edu.in",
+];
 
 const TYPE_STYLES = {
   success: { Icon: CheckCircle2, ring: "border-emerald-300", tint: "bg-emerald-50", ink: "text-emerald-700" },
@@ -46,15 +57,38 @@ export default function Notifications() {
   const [invitations, setInvitations] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
   const navigate = useNavigate();
 
-  const fetchData = useCallback((role) => {
+  const isAdmin = useMemo(() => {
+    if (!user?.email) return false;
+    const email = user.email.toLowerCase().trim();
+    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+  }, [user]);
+
+  const fetchData = useCallback((role, currentUser) => {
     setLoading(true);
     const promises = [getNotifications()];
     if (role === "student") {
       promises.push(getPendingInvitations());
     } else {
       promises.push(Promise.resolve({ data: [] }));
+    }
+
+    if (role === "teacher") {
+      const email = (currentUser?.email || "").toLowerCase().trim();
+      const userIsAdmin = ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+
+      Promise.all([
+        getFacultyTickets().catch(() => ({ data: [] })),
+        userIsAdmin ? getAllQuotaTokens().catch(() => ({ data: { tokens: [] } })) : Promise.resolve({ data: { tokens: [] } }),
+      ]).then(([ticketsRes, quotaRes]) => {
+        const tList = Array.isArray(ticketsRes?.data) ? ticketsRes.data : [];
+        const openTickets = tList.filter((t) => t.status === "pending" || t.status === "in_review").length;
+        const qList = Array.isArray(quotaRes?.data?.tokens) ? quotaRes.data.tokens : [];
+        const pendingQuota = qList.filter((t) => t.status === "pending").length;
+        setPendingTicketsCount(openTickets + pendingQuota);
+      }).catch((err) => console.error("Error loading tickets count:", err));
     }
 
     Promise.all(promises)
@@ -82,7 +116,7 @@ export default function Notifications() {
           navigate("/login");
         } else {
           setUser(res.data);
-          fetchData(res.data.role);
+          fetchData(res.data.role, res.data);
         }
       })
       .catch(() => navigate("/login"));
@@ -97,7 +131,7 @@ export default function Notifications() {
       loading: "Submitting your response...",
       success: (res) => res.data?.message || "Response recorded!",
       error: (err) => {
-        fetchData(); // refresh if error
+        fetchData(user?.role, user); // refresh if error
         return err.response?.data?.message || "Action failed.";
       },
     });
@@ -129,11 +163,12 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-800">
-      <div className="relative max-w-4xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
+      <div className="relative max-w-6xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
         <Navbar
           user={user}
           handleLogout={handleLogout}
           notificationCount={invitations.length + notifications.length}
+          pendingTicketsCount={pendingTicketsCount}
         />
 
         {user?.role === "student" && (
@@ -268,7 +303,18 @@ export default function Notifications() {
               {notifications.map((note) => {
                 const { Icon, ring, tint, ink } =
                   TYPE_STYLES[note.type] || TYPE_STYLES.info;
-                const id = note._id || note.id;
+                const isQuotaRequest =
+                  note.title?.toLowerCase().includes("quota request") ||
+                  note.message?.includes("Token #PQT-") ||
+                  note.message?.toLowerCase().includes("quota");
+
+                const isChangeTicket =
+                  note.title?.toLowerCase().includes("ticket") ||
+                  note.message?.includes("Token #CT-") ||
+                  note.message?.includes("Ticket #");
+
+                const tokenMatch = (note.message || "").match(/Token #(PQT-[A-Za-z0-9-]+)/i);
+                const tokenNumber = tokenMatch ? tokenMatch[1] : "";
 
                 return (
                   <div
@@ -288,6 +334,41 @@ export default function Notifications() {
                       <p className="text-sm text-gray-600 mt-0.5 break-words">
                         {note.message}
                       </p>
+
+                      {/* Action for Faculty Quota Tokens (Admins / Coordinators) */}
+                      {isQuotaRequest && (
+                        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2.5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-xs font-bold">
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                            Faculty Project Quota Request
+                          </span>
+                          <Link
+                            to={`/teacher/tickets?tab=admin_quota${tokenNumber ? `&token=${encodeURIComponent(tokenNumber)}` : ""}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white text-xs font-extrabold shadow-sm border-2 border-black transition active:scale-95"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Review & Approve Request</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+                          </Link>
+                        </div>
+                      )}
+
+                      {/* Action for Student Change Tickets */}
+                      {isChangeTicket && (
+                        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2.5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-cyan-50 text-cyan-900 border border-cyan-200 text-xs font-bold">
+                            <Ticket className="w-3.5 h-3.5 text-cyan-700" />
+                            Student Change Ticket
+                          </span>
+                          <Link
+                            to="/teacher/tickets?tab=tickets"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white text-xs font-extrabold shadow-sm border-2 border-black transition active:scale-95"
+                          >
+                            <span>Review Ticket</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+                          </Link>
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => handleDismiss(id)}

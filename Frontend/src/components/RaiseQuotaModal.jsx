@@ -13,7 +13,7 @@ export default function RaiseQuotaModal({
   currentQuota = 2,
   onSuccess,
 }) {
-  const [requestedProjects, setRequestedProjects] = useState(1);
+  const requestedProjects = 1;
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -21,11 +21,6 @@ export default function RaiseQuotaModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const count = parseInt(requestedProjects, 10);
-    if (isNaN(count) || count < 1) {
-      showToast.error("Please specify at least 1 additional project.");
-      return;
-    }
 
     if (!reason.trim() || reason.trim().length < 10) {
       showToast.error("Please provide a justification (at least 10 characters).");
@@ -35,7 +30,7 @@ export default function RaiseQuotaModal({
     setSubmitting(true);
     try {
       const res = await createQuotaToken({
-        requestedProjects: count,
+        requestedProjects: 1,
         reason: reason.trim(),
       });
       showToast.success(res.data?.message || `Token #${res.data?.token?.tokenNumber} submitted successfully!`);
@@ -99,42 +94,33 @@ export default function RaiseQuotaModal({
               </div>
               <div className="text-right">
                 <span className="px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 rounded-full text-xs font-black">
-                  New Quota: {currentQuota + (parseInt(requestedProjects, 10) || 0)}
+                  New Quota: {currentQuota + 1}
                 </span>
               </div>
             </div>
 
-            {/* Requested Projects Count */}
-            <div>
-              <label className="text-xs font-black uppercase tracking-wider text-slate-800 block mb-1.5">
-                Number of Additional Projects Needed:
-              </label>
-              <div className="flex items-center gap-2 mb-2">
-                {[1, 2, 3, 4, 5].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setRequestedProjects(num)}
-                    className={`py-1.5 px-3 rounded-xl text-xs font-black border-2 transition ${
-                      requestedProjects === num
-                        ? "bg-slate-950 text-white border-black shadow-sm"
-                        : "bg-slate-50 hover:bg-slate-100 border-slate-300 text-slate-700"
-                    }`}
-                  >
-                    +{num}
-                  </button>
-                ))}
+            {/* Fixed to 1 Additional Project */}
+            <div className="p-4 rounded-2xl bg-cyan-50/70 border-2 border-cyan-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-cyan-600 text-white shadow-sm">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-cyan-900 block">
+                      Quota Request Policy
+                    </span>
+                    <p className="text-xs sm:text-sm font-black text-slate-950 mt-0.5">
+                      +1 Additional Project Proposal
+                    </p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-slate-950 text-white text-xs font-black shadow-sm">
+                  1 Project Slot
+                </span>
               </div>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={requestedProjects}
-                onChange={(e) => setRequestedProjects(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                className="w-full py-2.5 px-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 transition"
-              />
-              <p className="text-[11px] text-slate-500 font-medium mt-1">
-                Specifies how many additional major project proposals you wish to upload beyond your current limit.
+              <p className="text-[11px] text-slate-600 font-medium mt-2 leading-relaxed">
+                Faculty members can request approval for <strong>1 additional project topic</strong> per quota token. Once this request is reviewed and approved, your project limit will increase by 1.
               </p>
             </div>
 

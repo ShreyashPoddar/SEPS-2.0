@@ -23,16 +23,13 @@ export const createQuotaToken = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Only faculty members can raise quota tokens." });
     }
 
-    const { requestedProjects, reason } = req.body;
-    const count = parseInt(requestedProjects, 10);
-
-    if (isNaN(count) || count < 1 || count > 20) {
-      return res.status(400).json({ message: "Please specify a valid number of additional projects (between 1 and 20)." });
-    }
+    const { reason } = req.body;
+    // Strict enforcement: Count is always fixed to exactly 1 additional project
+    const count = 1;
 
     const trimmedReason = (reason || "").trim();
     if (!trimmedReason || trimmedReason.length < 10) {
-      return res.status(400).json({ message: "Please provide a detailed justification (at least 10 characters) explaining why you need additional project topics." });
+      return res.status(400).json({ message: "Please provide a detailed justification (at least 10 characters) explaining why you need 1 additional project topic." });
     }
 
     const teacherId = req.user.id || req.user._id;
@@ -47,7 +44,7 @@ export const createQuotaToken = async (req, res) => {
 
     if (existingPending) {
       return res.status(400).json({
-        message: `You already have an active Token (#${existingPending.tokenNumber}) for ${existingPending.requestedProjects} additional project(s) pending coordinator review. Please wait for it to be processed.`,
+        message: `You already have an active Token (#${existingPending.tokenNumber}) for 1 additional project pending coordinator review. Please wait for it to be processed.`,
       });
     }
 
@@ -63,7 +60,7 @@ export const createQuotaToken = async (req, res) => {
         teacherId,
         teacherName: req.user.fullName,
         teacherEmail: req.user.email,
-        requestedProjects: count,
+        requestedProjects: 1,
         reason: trimmedReason,
         status: "pending",
       },
@@ -82,7 +79,7 @@ export const createQuotaToken = async (req, res) => {
         data: {
           userId: admin.id,
           title: "New Faculty Project Quota Request",
-          message: `${req.user.fullName} has raised Token #${tokenNumber} requesting permission to upload ${count} additional project(s). Reason: "${trimmedReason}"`,
+          message: `${req.user.fullName} has raised Token #${tokenNumber} requesting permission to upload 1 additional project. Reason: "${trimmedReason}"`,
           type: "info",
         },
       });
@@ -185,6 +182,11 @@ export const getAllQuotaTokens = async (req, res) => {
 
     const enrichedTokens = tokens.map((t) => ({
       ...t,
+      teacherName: t.teacher?.fullName || "Faculty Member",
+      teacherEmail: t.teacher?.email || "",
+      teacherDepartment: t.teacher?.department || "",
+      teacherCurrentProjectsCount: countsMap[t.teacherId] || 0,
+      teacherCurrentQuota: t.teacher?.projectQuota || 2,
       currentProjectCount: countsMap[t.teacherId] || 0,
       currentQuota: t.teacher?.projectQuota || 2,
     }));
@@ -232,7 +234,7 @@ export const reviewQuotaToken = async (req, res) => {
     const remarks = (adminRemarks || "").trim();
 
     if (action === "approve") {
-      const additionalCount = parseInt(approvedProjects, 10) || token.requestedProjects;
+      const additionalCount = 1;
       const currentQuota = token.teacher?.projectQuota || 2;
       const newQuota = currentQuota + additionalCount;
 
@@ -246,8 +248,8 @@ export const reviewQuotaToken = async (req, res) => {
           where: { id },
           data: {
             status: "approved",
-            approvedProjects: additionalCount,
-            adminRemarks: remarks || `Approved +${additionalCount} additional project topic(s).`,
+            approvedProjects: 1,
+            adminRemarks: remarks || `Approved +1 additional project topic.`,
             reviewedById: adminId,
             reviewedAt: new Date(),
           },
@@ -262,7 +264,7 @@ export const reviewQuotaToken = async (req, res) => {
         data: {
           userId: token.teacherId,
           title: "🎉 Project Quota Token Approved!",
-          message: `Your request for ${additionalCount} additional project(s) (Token #${token.tokenNumber}) has been approved by Coordinator ${req.user.fullName}. Your project creation limit is now ${newQuota} projects.${remarks ? " Note: " + remarks : ""}`,
+          message: `Your request for 1 additional project (Token #${token.tokenNumber}) has been approved by Coordinator ${req.user.fullName}. Your project creation limit is now ${newQuota} projects.${remarks ? " Note: " + remarks : ""}`,
           type: "success",
         },
       });

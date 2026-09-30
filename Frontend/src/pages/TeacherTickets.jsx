@@ -155,6 +155,24 @@ export default function TeacherTickets() {
       .catch(() => navigate("/login"));
   }, [navigate, fetchTickets, fetchMyQuota, fetchAllQuota]);
 
+  // Sync with URL query parameters whenever they change
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "quota") {
+      setMainMode("my_quota");
+    } else if (tab === "admin_quota") {
+      setMainMode("admin_quota");
+    } else if (tab === "tickets" || tab === "change_tickets") {
+      setMainMode("change_tickets");
+    }
+
+    const tokenQuery = searchParams.get("token") || searchParams.get("search");
+    if (tokenQuery) {
+      setAdminQuotaSearch(tokenQuery);
+      setAdminQuotaFilter("all");
+    }
+  }, [searchParams]);
+
   // Sync tab change with URL query parameter
   const switchMainMode = (mode) => {
     setMainMode(mode);
@@ -271,8 +289,8 @@ export default function TeacherTickets() {
     const q = adminQuotaSearch.toLowerCase().trim();
     return list.filter((t) => {
       const tNum = (t.tokenNumber || "").toLowerCase();
-      const tName = (t.teacherName || "").toLowerCase();
-      const tEmail = (t.teacherEmail || "").toLowerCase();
+      const tName = (t.teacherName || t.teacher?.fullName || "").toLowerCase();
+      const tEmail = (t.teacherEmail || t.teacher?.email || "").toLowerCase();
       const tReason = (t.reason || "").toLowerCase();
       return (
         tNum.includes(q) ||
@@ -860,7 +878,7 @@ export default function TeacherTickets() {
                               Token #{token.tokenNumber || token.id.slice(0, 8)}
                             </span>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-50 text-cyan-900 border border-cyan-300">
-                              Requested +{token.requestedProjects} Projects
+                              Requested +{token.requestedProjects || 1} Project
                             </span>
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
@@ -872,7 +890,7 @@ export default function TeacherTickets() {
                               }`}
                             >
                               {token.status === "approved"
-                                ? `Approved (+${token.approvedProjects || token.requestedProjects} Slots)`
+                                ? `Approved (+${token.approvedProjects || token.requestedProjects || 1} Slot)`
                                 : token.status === "rejected"
                                 ? "Declined by Admin"
                                 : "Pending Admin Review"}
@@ -1101,7 +1119,7 @@ export default function TeacherTickets() {
                               Token #{token.tokenNumber || token.id.slice(0, 8)}
                             </span>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-100 text-cyan-950 border border-cyan-400">
-                              Requested +{token.requestedProjects} Additional Projects
+                              Requested +{token.requestedProjects || 1} Additional Project
                             </span>
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
@@ -1113,7 +1131,7 @@ export default function TeacherTickets() {
                               }`}
                             >
                               {token.status === "approved"
-                                ? `Approved (+${token.approvedProjects || token.requestedProjects} Slots)`
+                                ? `Approved (+${token.approvedProjects || token.requestedProjects || 1} Slot)`
                                 : token.status === "rejected"
                                 ? "Declined"
                                 : "Pending Review"}
@@ -1122,20 +1140,20 @@ export default function TeacherTickets() {
                           <div className="flex items-center gap-2 mt-1">
                             <User className="w-4 h-4 text-slate-500" />
                             <h4 className="text-base font-black text-slate-950">
-                              {token.teacherName}
+                              {token.teacherName || token.teacher?.fullName || "Faculty Member"}
                             </h4>
                             <span className="text-xs text-slate-500 font-medium">
-                              ({token.teacherEmail})
+                              ({token.teacherEmail || token.teacher?.email || "No email"})
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
                             Current Usage:{" "}
                             <strong className="text-slate-800">
-                              {token.teacherCurrentProjectsCount} uploaded
+                              {token.teacherCurrentProjectsCount ?? token.currentProjectCount ?? 0} uploaded
                             </strong>{" "}
                             of{" "}
                             <strong className="text-slate-800">
-                              {token.teacherCurrentQuota} permitted slots
+                              {token.teacherCurrentQuota ?? token.currentQuota ?? 2} permitted slots
                             </strong>{" "}
                             &bull; Submitted on{" "}
                             {new Date(token.createdAt).toLocaleDateString("en-IN", {
@@ -1225,7 +1243,7 @@ export default function TeacherTickets() {
                             >
                               <CheckCircle2 className="w-4 h-4" />
                               <span>
-                                Approve (+{token.requestedProjects} Projects Allowed)
+                                Approve (+{token.requestedProjects || 1} Project Allowed)
                               </span>
                             </button>
                             <button
