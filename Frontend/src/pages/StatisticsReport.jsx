@@ -650,7 +650,6 @@ export default function StatisticsReport() {
                         <th className="p-3 w-10 text-center">#</th>
                         <th className="p-3">Student Name</th>
                         <th className="p-3">Registration Number</th>
-                        <th className="p-3">Email Address</th>
                         <th className="p-3">Status</th>
                       </tr>
                     </thead>
@@ -658,7 +657,7 @@ export default function StatisticsReport() {
                       {studentTab === "withoutApplications" ? (
                         (stats.studentsWithoutApplications || []).length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="p-6 text-center text-emerald-600 font-bold">
+                            <td colSpan={4} className="p-6 text-center text-emerald-600 font-bold">
                               ✓ All registered students have submitted applications or been allocated!
                             </td>
                           </tr>
@@ -668,7 +667,6 @@ export default function StatisticsReport() {
                               <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
                               <td className="p-3 font-extrabold text-slate-950">{s.name}</td>
                               <td className="p-3 font-mono text-slate-700 font-bold">{s.regNo}</td>
-                              <td className="p-3 text-slate-600 font-mono">{s.email}</td>
                               <td className="p-3">
                                 <span className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg text-[10px] font-black uppercase">
                                   Action Required: Unallocated
@@ -680,7 +678,7 @@ export default function StatisticsReport() {
                       ) : (
                         (stats.studentsWithApplications || []).length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="p-6 text-center text-slate-400 font-bold">
+                            <td colSpan={4} className="p-6 text-center text-slate-400 font-bold">
                               No student applications recorded yet.
                             </td>
                           </tr>
@@ -690,7 +688,6 @@ export default function StatisticsReport() {
                               <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
                               <td className="p-3 font-extrabold text-slate-950">{s.name}</td>
                               <td className="p-3 font-mono text-slate-700 font-bold">{s.regNo}</td>
-                              <td className="p-3 text-slate-600 font-mono">{s.email}</td>
                               <td className="p-3">
                                 <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-black uppercase">
                                   Applied / Allocated
