@@ -877,7 +877,16 @@ export const getStatistics = () =>
 export const createQuotaToken = (data) => API.post("/quota-tokens", data);
 export const getMyQuotaTokens = () => API.get("/quota-tokens/my");
 export const getAllQuotaTokens = () => API.get("/quota-tokens/all");
-export const reviewQuotaToken = (id, data) => API.patch(`/quota-tokens/${id}/review`, data);
+export const reviewQuotaToken = async (id, data) => {
+  try {
+    return await API.patch(`/quota-tokens/${id}/review`, data);
+  } catch (err) {
+    if (err.code === "ERR_NETWORK" || err.response?.status === 405) {
+      return await API.post(`/quota-tokens/${id}/review`, data);
+    }
+    throw err;
+  }
+};
 
 // Admin Database Flush & Semester Reset
 export const flushDatabase = (confirmation) =>

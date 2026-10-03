@@ -220,6 +220,9 @@ export default function TeacherDashboard() {
         } else {
           showNotification("Session verification delayed. Connecting to server...", "error");
         }
+      })
+      .finally(() => {
+        setInitialLoading(false);
       });
 
     getGlobalDeadline()

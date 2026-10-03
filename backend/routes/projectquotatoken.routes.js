@@ -17,5 +17,7 @@ router.get("/my", protectRoute, getMyQuotaTokens);
 // Admin coordinator routes
 router.get("/all", protectRoute, getAllQuotaTokens);
 router.patch("/:id/review", protectRoute, reviewQuotaToken);
+router.put("/:id/review", protectRoute, reviewQuotaToken);
+router.post("/:id/review", protectRoute, reviewQuotaToken);
 
 export default router;

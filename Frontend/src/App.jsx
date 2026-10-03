@@ -19,6 +19,7 @@ import SetGlobalDeadline from "./pages/SetGlobalDeadline.jsx";
 import StatisticsReport from "./pages/StatisticsReport.jsx";
 import TeacherTickets from "./pages/TeacherTickets.jsx";
 import LoadingSpinner from "./components/LoadingSpinner.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { useEffect, useState } from "react";
 import { Toaster } from "react-hot-toast";
 
@@ -43,44 +44,57 @@ function SetGlobalDeadlineWrapper() {
 }
 
 export default function App() {
+  // Automatically recover if page is restored from browser Back-Forward Cache (bfcache)
+  useEffect(() => {
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        window.location.reload();
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Navigate to="/login" replace />} />
-        <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
-        <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Navigate to="/login" replace />} />
+          <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+          <Route path="/reset-password" element={<Navigate to="/login" replace />} />
 
-        {/* Student Routes */}
-        <Route path="/student-dashboard" element={<StudentDashboard />} />
-        <Route path="/student-profile" element={<StudentProfile />} />
-        <Route path="/notifications" element={<Notifications />} />
+          {/* Student Routes */}
+          <Route path="/student-dashboard" element={<StudentDashboard />} />
+          <Route path="/student-profile" element={<StudentProfile />} />
+          <Route path="/notifications" element={<Notifications />} />
 
-        {/* Teacher Routes */}
-        <Route path="/teacher-dashboard" element={<TeacherDashboard />} />
-        <Route path="/teacher-profile" element={<TeacherProfile />} />
-        <Route
-          path="/teacher/applications/:id"
-          element={<TeacherApplications />}
-        />
-        <Route
-          path="/teacher/project-applications/:id"
-          element={<TeacherApplications />}
-        />
-        <Route
-          path="/teacher/update-project/:projectId"
-          element={<UpdateProject />}
-        />
-        <Route path="/teacher/my-teams" element={<MyTeams />} />
-        <Route path="/teacher/set-global-deadline" element={<SetGlobalDeadlineWrapper />} />
-        <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
-        <Route path="/teacher/tickets" element={<TeacherTickets />} />
+          {/* Teacher Routes */}
+          <Route path="/teacher-dashboard" element={<TeacherDashboard />} />
+          <Route path="/teacher-profile" element={<TeacherProfile />} />
+          <Route
+            path="/teacher/applications/:id"
+            element={<TeacherApplications />}
+          />
+          <Route
+            path="/teacher/project-applications/:id"
+            element={<TeacherApplications />}
+          />
+          <Route
+            path="/teacher/update-project/:projectId"
+            element={<UpdateProject />}
+          />
+          <Route path="/teacher/my-teams" element={<MyTeams />} />
+          <Route path="/teacher/set-global-deadline" element={<SetGlobalDeadlineWrapper />} />
+          <Route path="/teacher/statistics-report" element={<StatisticsReport />} />
+          <Route path="/teacher/tickets" element={<TeacherTickets />} />
 
-        {/* Catch-all fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ErrorBoundary>
       <Toaster
         position="top-right"
         toastOptions={{
