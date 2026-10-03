@@ -300,7 +300,8 @@ export default function Notifications() {
             </div>
           ) : (
             <div className="space-y-4">
-              {notifications.map((note) => {
+              {notifications.map((note, index) => {
+                const id = note._id || note.id || `note-${index}`;
                 const { Icon, ring, tint, ink } =
                   TYPE_STYLES[note.type] || TYPE_STYLES.info;
                 const isQuotaRequest =
