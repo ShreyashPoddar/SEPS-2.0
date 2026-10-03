@@ -4,6 +4,11 @@ import path from "path";
 const SCREENSHOT_DIR = path.resolve("./manual_assets/screenshots");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+if (!process.env.DEBUG_STUDENT_REGNO || !process.env.DEBUG_STUDENT_PASSWORD) {
+  console.error("Set DEBUG_STUDENT_REGNO and DEBUG_STUDENT_PASSWORD (a test account) first.");
+  process.exit(1);
+}
+
 (async () => {
   const browser = await puppeteer.launch({
     executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -16,11 +21,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   console.log("Navigating to /login...");
   await page.goto("http://localhost:5176/login", { waitUntil: "networkidle2" });
-  await page.type('input', 'RA2311053010076');
+  await page.type('input', process.env.DEBUG_STUDENT_REGNO);
   await page.click('button[type="submit"]');
 
   await page.waitForSelector('input[type="password"]', { timeout: 5000 });
-  await page.type('input[type="password"]', 'suha010076');
+  await page.type('input[type="password"]', process.env.DEBUG_STUDENT_PASSWORD);
   await page.click('button[type="submit"]');
 
   await page.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {});

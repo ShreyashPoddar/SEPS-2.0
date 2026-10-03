@@ -74,7 +74,9 @@ export function getFriendlyErrorMessage(err, fallback = "An unexpected error occ
  */
 export const showToast = {
   error: (messageOrError, options = {}) => {
-    const message = getFriendlyErrorMessage(messageOrError);
+    const { fallback, ...toastOptions } = options;
+    options = toastOptions;
+    const message = getFriendlyErrorMessage(messageOrError, fallback);
     // Use the message itself as the default deduplication ID
     const toastId = options.id || `err_${message.slice(0, 50)}`;
     return toast.error(message, {
@@ -104,12 +106,21 @@ export const showToast = {
   },
 
   promise: (promise, messages = {}, options = {}) => {
+    const defaultError = "Action failed. Please try again.";
     return toast.promise(
       promise,
       {
         loading: messages.loading || "Processing request...",
         success: messages.success || "Completed successfully!",
-        error: (err) => getFriendlyErrorMessage(err, messages.error || "Action failed. Please try again."),
+        // `error` may be a string or a callback; callbacks must actually run
+        // (callers use them to reset state) and may return their own message.
+        error: (err) => {
+          if (typeof messages.error === "function") {
+            const custom = messages.error(err);
+            return custom || getFriendlyErrorMessage(err, defaultError);
+          }
+          return getFriendlyErrorMessage(err, messages.error || defaultError);
+        },
       },
       options
     );

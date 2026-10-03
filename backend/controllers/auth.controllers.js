@@ -1,6 +1,7 @@
 import { generateToken } from "../lib/utils.js";
 import prisma from "../lib/db.js";
 import bcrypt from "bcryptjs";
+import { isAdminUser } from "../lib/admin.js";
 
 export function getStudentPasswords(fullName, regNo) {
   const parts = (fullName || "")
@@ -97,9 +98,8 @@ export const identifyUser = async (req, res) => {
       return res.status(200).json({
         role: "student",
         fullName: user.fullName,
-        regNo: user.regNo,
-        department: user.department,
-        email: user.email,
+        // Echo back what the caller typed; don't disclose other identifiers.
+        regNo: rawId.toUpperCase(),
         hasPassword: true,
         message: `Welcome back, ${user.fullName}. Please enter your password to continue.`,
       });
@@ -109,7 +109,7 @@ export const identifyUser = async (req, res) => {
       return res.status(200).json({
         role: "teacher",
         fullName: user.fullName,
-        email: user.email,
+        email: rawId.toLowerCase(),
         hasPassword: true,
         message: `Welcome back, ${user.fullName}. Please enter your password to continue.`,
       });
@@ -124,9 +124,10 @@ export const identifyUser = async (req, res) => {
 
 export const login = async (req, res) => {
   const { email, identifier, regNo, password } = req.body;
-  const loginId = (identifier || email || regNo || "").trim();
+  const rawLoginId = identifier || email || regNo || "";
+  const loginId = typeof rawLoginId === "string" ? rawLoginId.trim() : "";
 
-  if (!loginId || !password) {
+  if (!loginId || !password || typeof password !== "string" || typeof loginId !== "string") {
     return res.status(400).json({ message: "Register Number / Email and Password are required." });
   }
 
@@ -156,20 +157,8 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "No password configured for this account. Please contact coordinator." });
     }
 
-    let isPasswordCorrect = await bcrypt.compare(password, user.password);
-    if (!isPasswordCorrect && user.role === "student" && user.regNo) {
-      const candidates = getStudentPasswords(user.fullName, user.regNo);
-      if (candidates.includes(password.trim().toLowerCase())) {
-        isPasswordCorrect = true;
-      }
-    }
-    if (!isPasswordCorrect && user.role === "teacher" && user.email) {
-      const emailPrefix = user.email.split("@")[0].toLowerCase();
-      const teacherDefaults = [emailPrefix, "password123", "srmist123", "teacher123"];
-      if (teacherDefaults.includes(password.trim().toLowerCase()) || teacherDefaults.includes(password.trim())) {
-        isPasswordCorrect = true;
-      }
-    }
+    // Only the stored bcrypt hash is accepted — no guessable fallback passwords.
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
     if (!isPasswordCorrect) return res.status(400).json({ message: "Invalid credentials." });
 
@@ -183,10 +172,12 @@ export const login = async (req, res) => {
 
     generateToken(user.id, res);
 
-    const { password: _, ...userData } = user;
+    // eslint-disable-next-line no-unused-vars
+    const { password: _, verificationToken, resetPasswordToken, tokenExpires, resetPasswordExpires, ...userData } = user;
     res.status(200).json({
       ...userData,
       _id: user.id,
+      isAdmin: isAdminUser(user),
       phoneNumber: user.phoneNumber || "",
       profilePic: user.profilePic || null,
       isProfileComplete: user.isProfileComplete ?? false,
@@ -236,6 +227,19 @@ export const updateProfile = async (req, res) => {
     } = req.body;
 
     const userId = req.user._id;
+
+    if (internshipStatus !== undefined && !["regular", "internship"].includes(internshipStatus)) {
+      return res.status(400).json({ message: "internshipStatus must be 'regular' or 'internship'." });
+    }
+    if (internships !== undefined && !Array.isArray(internships)) {
+      return res.status(400).json({ message: "internships must be a list." });
+    }
+    if (skills !== undefined && skills !== null && !Array.isArray(skills) && typeof skills !== "string") {
+      return res.status(400).json({ message: "skills must be a list." });
+    }
+    if (cgpa !== undefined && cgpa !== null && cgpa !== "" && !Number.isFinite(Number(cgpa))) {
+      return res.status(400).json({ message: "CGPA must be a number." });
+    }
 
     const updatedFields = {};
     if (profilePic !== undefined) updatedFields.profilePic = profilePic;
@@ -409,6 +413,24 @@ export const updateProfile = async (req, res) => {
       if (researchPast !== undefined) updatedFields.researchPast = researchPast;
     }
 
+    // The regular/internship track is what teams are matched on, so it can't be
+    // flipped once the student is on a team or an application.
+    if (
+      req.user.role === "student" &&
+      updatedFields.internshipStatus !== undefined &&
+      updatedFields.internshipStatus !== req.user.internshipStatus
+    ) {
+      const [inTeam, inApplication] = await Promise.all([
+        prisma.teamMember.findFirst({ where: { studentId: userId }, select: { id: true } }),
+        prisma.applicationMember.findFirst({ where: { studentId: userId }, select: { id: true } }),
+      ]);
+      if (inTeam || inApplication) {
+        return res.status(400).json({
+          message: "You can't change your internship track while you are part of a team or application. Cancel it first.",
+        });
+      }
+    }
+
     let updatedUser;
     try {
       updatedUser = await prisma.user.update({
@@ -423,7 +445,12 @@ export const updateProfile = async (req, res) => {
     }
 
     delete updatedUser.password;
+    delete updatedUser.verificationToken;
+    delete updatedUser.resetPasswordToken;
+    delete updatedUser.tokenExpires;
+    delete updatedUser.resetPasswordExpires;
     updatedUser._id = updatedUser.id;
+    updatedUser.isAdmin = isAdminUser(updatedUser);
 
     res.status(200).json(updatedUser);
   } catch (error) {

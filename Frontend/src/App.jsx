@@ -40,6 +40,10 @@ function SetGlobalDeadlineWrapper() {
     return <LoadingSpinner fullScreen text="Verifying Coordinator Authorization..." />;
   }
 
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   return <SetGlobalDeadline user={user} />;
 }
 

@@ -35,10 +35,8 @@ export default function MyTeams() {
     getApprovedTeams()
       .then((res) => {
         const rawTeams = Array.isArray(res.data) ? res.data : (res.data?.teams || []);
-        const filteredTeams = rawTeams.filter(
-          (team) => team.facultyName === currentUser.fullName || team.facultyId === currentUser._id
-        );
-        setMyTeams(filteredTeams);
+        // The API already returns only this teacher's teams.
+        setMyTeams(rawTeams);
       })
       .catch((err) => {
         console.error("Failed to fetch teams:", err);
@@ -78,11 +76,13 @@ export default function MyTeams() {
         loading: "Removing member...",
         success: (res) => {
           setMyTeams((prev) =>
-            prev.map((team) => (team._id === teamId ? res.data.team : team))
+            res.data.disbanded
+              ? prev.filter((team) => team._id !== teamId)
+              : prev.map((team) => (team._id === teamId ? res.data.team : team))
           );
-          return "Member removed successfully";
+          return res.data.disbanded ? "Member removed; empty team disbanded" : "Member removed successfully";
         },
-        error: "Failed to remove member",
+        error: (err) => err.response?.data?.message || "Failed to remove member",
       });
     }
   };

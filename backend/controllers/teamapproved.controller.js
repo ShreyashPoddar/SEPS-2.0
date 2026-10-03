@@ -63,6 +63,12 @@ export const approveApplication = async (req, res) => {
       return res.status(denied.status).json({ message: denied.message });
     }
 
+    if (application.status !== "pending_faculty_approval") {
+      return res.status(400).json({
+        message: "This application cannot be approved yet: all invited teammates must accept first.",
+      });
+    }
+
     // Check if this project is already approved for a team
     const existingTeamForProject = await prisma.teamApproved.findFirst({
       where: {
@@ -118,20 +124,61 @@ export const approveApplication = async (req, res) => {
       }
     }
 
-    const approvedTeam = await prisma.teamApproved.create({
-      data: {
-        projectId: application.project.id,
-        facultyName: application.project.facultyName,
-        applicationType: application.applicationType,
-        members: {
-          create: application.members.map((m) => ({
-            studentId: m.studentId,
-            name: m.name,
-            regNo: m.regNo,
-          })),
+    const memberIds = application.members.map((m) => m.studentId);
+
+    // Team creation, ticket hand-over and clean-up of the members' other
+    // applications must succeed or fail together.
+    const { approvedTeam, discardedOtherMemberIds } = await prisma.$transaction(async (tx) => {
+      const team = await tx.teamApproved.create({
+        data: {
+          projectId: application.project.id,
+          facultyName: application.project.facultyName,
+          applicationType: application.applicationType,
+          members: {
+            create: application.members.map((m) => ({
+              studentId: m.studentId,
+              name: m.name,
+              regNo: m.regNo,
+            })),
+          },
         },
-      },
-      include: teamWithMembers,
+        include: teamWithMembers,
+      });
+
+      // Tickets raised against this application move to the approved team, so the
+      // roster-change history survives approval.
+      await tx.ticket.updateMany({
+        where: { applicationId },
+        data: { teamId: team.id, applicationId: null },
+      });
+
+      const otherApplications = await tx.studentProjectApply.findMany({
+        where: {
+          id: { not: applicationId },
+          members: { some: { studentId: { in: memberIds } } },
+        },
+        select: { id: true, project: { select: { projectTitle: true } }, members: { select: { studentId: true } } },
+      });
+      const discardedIds = otherApplications.map((a) => a.id);
+
+      if (discardedIds.length) {
+        await tx.ticket.deleteMany({ where: { applicationId: { in: discardedIds } } });
+      }
+      // The approved application itself is also removed; its tickets already moved.
+      await tx.studentProjectApply.deleteMany({
+        where: { id: { in: [...discardedIds, applicationId] } },
+      });
+
+      // Other students whose whole application was discarded because of this approval
+      const affected = [];
+      for (const other of otherApplications) {
+        for (const m of other.members) {
+          if (!memberIds.includes(m.studentId)) {
+            affected.push({ studentId: m.studentId, title: other.project?.projectTitle });
+          }
+        }
+      }
+      return { approvedTeam: team, discardedOtherMemberIds: affected };
     });
 
     for (const member of application.members) {
@@ -144,34 +191,16 @@ export const approveApplication = async (req, res) => {
         },
       });
     }
-
-    // Tickets raised against this application move to the approved team, so the
-    // roster-change history survives approval. Without this the applications are
-    // deleted below and every ticket went with them — leaving students unable to
-    // request a member change at the one point they most need to.
-    await prisma.ticket.updateMany({
-      where: { applicationId },
-      data: { teamId: approvedTeam.id, applicationId: null },
-    });
-
-    const memberIds = application.members.map((m) => m.studentId);
-    const otherApplications = await prisma.studentProjectApply.findMany({
-      where: { members: { some: { studentId: { in: memberIds } } } },
-      select: { id: true },
-    });
-    const discardedIds = otherApplications
-      .map((a) => a.id)
-      .filter((id) => id !== applicationId);
-
-    // Tickets on the members' other (now-discarded) applications are meaningless
-    // once those applications go, so drop them rather than leaving them orphaned.
-    if (discardedIds.length) {
-      await prisma.ticket.deleteMany({ where: { applicationId: { in: discardedIds } } });
+    for (const other of discardedOtherMemberIds) {
+      await prisma.notification.create({
+        data: {
+          userId: other.studentId,
+          title: "Project Application Withdrawn",
+          message: `Your application for "${other.title || "a project"}" was withdrawn because a teammate was allocated to another project. You can form a new team and apply again.`,
+          type: "warning",
+        },
+      });
     }
-
-    await prisma.studentProjectApply.deleteMany({
-      where: { id: { in: otherApplications.map((a) => a.id) } },
-    });
 
     res.status(201).json({
       message:
@@ -283,6 +312,22 @@ export const removeMemberFromTeam = async (req, res) => {
 
     await prisma.teamMember.delete({ where: { id: existingMember.id } });
 
+    // A team with no members must not keep holding the project.
+    const remaining = await prisma.teamMember.count({ where: { teamId } });
+    if (remaining === 0) {
+      await prisma.ticket.updateMany({ where: { teamId }, data: { teamId: null } });
+      await prisma.teamApproved.delete({ where: { id: teamId } });
+      await prisma.notification.create({
+        data: {
+          userId: memberId,
+          title: "Removed from Team",
+          message: `You have been removed from the project "${team.project.projectTitle}" by ${team.facultyName}. The team was disbanded.`,
+          type: "warning",
+        },
+      });
+      return res.status(200).json({ message: "Member removed; the empty team was disbanded", team: null, disbanded: true, teamId });
+    }
+
     const updatedTeam = await prisma.teamApproved.findUnique({
       where: { id: teamId },
       include: teamWithMembers,
@@ -323,6 +368,15 @@ export const addMemberToTeam = async (req, res) => {
       return res.status(denied.status).json({ message: denied.message });
     }
 
+    if (!studentId || typeof studentId !== "string") {
+      return res.status(400).json({ message: "studentId is required" });
+    }
+
+    const currentSize = await prisma.teamMember.count({ where: { teamId } });
+    if (currentSize >= 3) {
+      return res.status(400).json({ message: "A team can have at most 3 members." });
+    }
+
     const alreadyInTeam = await prisma.teamMember.findFirst({ where: { studentId } });
     if (alreadyInTeam) {
       return res.status(400).json({
@@ -331,7 +385,7 @@ export const addMemberToTeam = async (req, res) => {
     }
 
     const student = await prisma.user.findUnique({ where: { id: studentId } });
-    if (!student) {
+    if (!student || student.role !== "student" || !student.regNo) {
       return res.status(404).json({ message: "Student not found" });
     }
 

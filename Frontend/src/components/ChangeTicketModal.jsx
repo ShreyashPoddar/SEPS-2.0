@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import showToast from "../utils/toastUtils";
 import {
@@ -37,7 +37,7 @@ export default function ChangeTicketModal({
   onTicketSubmitted,
   initialTicketType = "name_correction",
 }) {
-  const members = application?.members || [];
+  const members = useMemo(() => application?.members || [], [application]);
   const cohortTrack = application?.cohortTrack || currentUser?.internshipStatus || "regular";
   const leaderDept = currentUser?.department || "Dept of ECE";
 
@@ -164,13 +164,13 @@ export default function ChangeTicketModal({
         : { applicationId: application._id }),
       projectTitle: application.projectTitle || "Selected Project",
       facultyName: application.facultyName,
-      targetMember: selectedMember ? {
+      targetMember: ticketType !== "cancellation" && selectedMember ? {
         studentId: selectedMember.studentId,
         name: selectedMember.name,
         regNo: selectedMember.regNo,
         department: selectedMember.department || "Dept of ECE",
       } : {
-        studentId: currentUser?.studentId || currentUser?._id,
+        studentId: currentUser?._id || currentUser?.id,
         name: currentUser?.fullName || currentUser?.name,
         regNo: currentUser?.regNo,
         department: currentUser?.department || "Dept of ECE",
@@ -280,7 +280,7 @@ export default function ChangeTicketModal({
                   Project Application Cancellation Request
                 </h4>
                 <p className="text-[11px] text-red-800 font-medium">
-                  This action requests full cancellation of the application for the entire project team ({members.length} members).
+                  This action requests that YOU leave this project. Your teammates stay on the team unless you are the only member left.
                 </p>
               </div>
             </div>

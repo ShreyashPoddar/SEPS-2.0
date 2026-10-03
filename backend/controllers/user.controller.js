@@ -3,13 +3,29 @@ import prisma from "../lib/db.js";
 // 🔍 Search student by regNo and check if they are already in a team
 export const searchStudentByRegNo = async (req, res) => {
   try {
-    const { regNo } = req.query;
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Access denied. Only teachers can look up students." });
+    }
+
+    const regNo = typeof req.query.regNo === "string" ? req.query.regNo.trim() : "";
 
     if (!regNo) {
       return res.status(400).json({ message: "Register number is required" });
     }
 
-    const student = await prisma.user.findFirst({ where: { regNo, role: "student" } });
+    // Never return the whole row: it carries password hash and reset/verification tokens.
+    const student = await prisma.user.findFirst({
+      where: { regNo: { in: [regNo, regNo.toUpperCase()] }, role: "student" },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        regNo: true,
+        department: true,
+        internshipStatus: true,
+        cgpa: true,
+      },
+    });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -33,10 +49,9 @@ export const searchStudentByRegNo = async (req, res) => {
     }
 
     student._id = student.id;
-    delete student.password;
     res.status(200).json({ student });
   } catch (err) {
     console.error("Search student error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 };

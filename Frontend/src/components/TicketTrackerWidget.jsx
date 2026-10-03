@@ -24,11 +24,11 @@ import {
 import { getMyApplications, getStudentTickets, cancelTicket, cancelPendingApplication } from "../api";
 import ChangeTicketModal from "./ChangeTicketModal";
 
-export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
+export default function TicketTrackerWidget({ currentUser, refreshKey = 0 }) {
   const [activeTab, setActiveTab] = useState("applications"); // 'applications' | 'tickets'
   const [applications, setApplications] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Modal for raising a change ticket on an application
   const [selectedAppForTicket, setSelectedAppForTicket] = useState(null);
@@ -52,7 +52,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [refreshKey]);
 
   const handleCancelApplication = async (app) => {
     if (app.status === "approved") {
@@ -284,7 +284,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                       <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
                                         {m.department || "Dept of ECE"}
                                       </span>
-                                      {m.status === "accepted" ? (
+                                      {m.status === "approved" ? (
                                         <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
                                           ✓ Confirmed
                                         </span>
@@ -417,7 +417,7 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                             Verification Workflow Timeline
                           </h4>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className={`grid grid-cols-2 gap-3 ${tck.changeType === "cancellation" ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                             {(tck.changeType === "cancellation"
                               ? [
                                   { s: 1, title: "1. Ticket Submitted", desc: "Logged in system" },
@@ -435,9 +435,8 @@ export default function TicketTrackerWidget({ currentUser, onOpenApplyModal }) {
                                 ]
                               : [
                                   { s: 1, title: "1. Ticket Submitted", desc: "Logged in system" },
-                                  { s: 2, title: "2. Faculty Review", desc: "Guide evaluation" },
-                                  { s: 3, title: "3. HoD Approval", desc: "Department sign-off" },
-                                  { s: 4, title: "4. Roster Updated", desc: "Locked into ERP" },
+                                  { s: 2, title: "2. Faculty Review", desc: "Project incharge evaluation" },
+                                  { s: 4, title: "3. Roster Updated", desc: "Locked into ERP" },
                                 ]
                             ).map((stage) => {
                               const isCompleted = step >= stage.s;

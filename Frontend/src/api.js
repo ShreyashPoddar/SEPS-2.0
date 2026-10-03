@@ -757,6 +757,12 @@ export const getNotifications = () =>
     })
   );
 
+export const markAllNotificationsRead = () =>
+  withFallback(
+    () => API.patch("/notifications/read-all"),
+    () => ({ success: true })
+  );
+
 export const deleteNotification = (id) =>
   withFallback(
     () => API.delete(`/notifications/${id}`),
@@ -824,7 +830,7 @@ export const removeTeamMember = (teamId, memberId) =>
 
 export const searchStudentByRegNo = (regNo) =>
   withFallback(
-    () => API.get(`/team-approved/search-student?regNo=${regNo}`),
+    () => API.get(`/team-approved/search-student?regNo=${encodeURIComponent(regNo || "")}`),
     () => mockStudents.find((s) => s.regNo.toLowerCase() === (regNo || "").toLowerCase()) || null
   );
 

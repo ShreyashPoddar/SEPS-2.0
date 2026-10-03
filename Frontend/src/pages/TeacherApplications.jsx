@@ -185,6 +185,19 @@ export default function TeacherApplications() {
           </div>
         </div>
 
+        {data.approvedTeam && (
+          <div className="mb-6 p-5 bg-emerald-50 border-2 border-emerald-500 rounded-3xl shadow-md">
+            <h3 className="text-sm font-black text-emerald-900 uppercase tracking-wider mb-2">Allocated Team</h3>
+            <ul className="text-xs font-semibold text-emerald-950 space-y-1">
+              {data.approvedTeam.members.map((m) => (
+                <li key={m.studentId}>
+                  {m.name} <span className="font-mono text-emerald-800">({m.regNo})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {data.applications.length === 0 ? (
           <div className="p-12 sm:p-16 bg-white rounded-3xl border-2 border-slate-900 text-center space-y-4 shadow-xl">
             <div className="w-16 h-16 rounded-3xl bg-slate-100 border-2 border-slate-300 flex items-center justify-center mx-auto text-slate-600">

@@ -1,11 +1,8 @@
 // controllers/globalDeadline.controller.js
 import prisma from "../lib/db.js";
 
-export const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
+import { isAdminUser } from "../lib/admin.js";
+
 
 export const getGlobalDeadline = async (req, res) => {
   try {
@@ -21,10 +18,7 @@ export const getGlobalDeadline = async (req, res) => {
 
 export const setGlobalDeadline = async (req, res) => {
   try {
-    const userEmail = (req.user?.email || "").trim().toLowerCase();
-    const isAuthorized =
-      req.user?.role === "teacher" &&
-      ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail);
+    const isAuthorized = isAdminUser(req.user);
 
     if (!isAuthorized) {
       return res.status(403).json({ message: "Not authorized. Admin faculty access required." });
@@ -35,10 +29,10 @@ export const setGlobalDeadline = async (req, res) => {
       return res.status(400).json({ message: "Deadline is required." });
     }
 
-    // If input is YYYY-MM-DD, set deadline to 23:59:59 end-of-day
+    // If input is YYYY-MM-DD, set deadline to 23:59:59 end-of-day IST (the institute timezone)
     let parsedDate;
     if (typeof deadline === "string" && /^\d{4}-\d{2}-\d{2}$/.test(deadline.trim())) {
-      parsedDate = new Date(`${deadline.trim()}T23:59:59.999Z`);
+      parsedDate = new Date(`${deadline.trim()}T23:59:59.999+05:30`);
     } else {
       parsedDate = new Date(deadline);
     }

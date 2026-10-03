@@ -62,6 +62,8 @@ const seedTeachers = async () => {
           password: hashedPassword,
           role: "teacher",
           isVerified: true,
+          internships: [],
+          skills: [],
         },
       });
       console.log(`🟢 Created teacher: ${fullName} (${email})`);

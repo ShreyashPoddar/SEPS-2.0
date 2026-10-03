@@ -47,6 +47,7 @@ export default function StudentDashboard() {
   const [myApplications, setMyApplications] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [invitations, setInvitations] = useState([]);
+  const [widgetRefreshKey, setWidgetRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Advanced Filtering State
@@ -138,6 +139,7 @@ export default function StudentDashboard() {
           setRawDeadline(res.data.deadline);
           setGlobalDeadline(
             new Date(res.data.deadline).toLocaleDateString("en-US", {
+              timeZone: "Asia/Kolkata",
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -221,7 +223,8 @@ export default function StudentDashboard() {
 
     // 5. Vacancy Filter
     if (vacancyFilter === "available_only") {
-      result = result.filter((p) => (p.vacancies || 0) > 0);
+      // Projects without a vacancies figure (the API doesn't send one) are open.
+      result = result.filter((p) => p.vacancies === undefined || p.vacancies > 0);
     }
 
     // 6. Sorting
@@ -270,9 +273,11 @@ export default function StudentDashboard() {
   const isAllocated = myApplications.some((app) => app.status === "approved" || app.teamId);
   const nextPriority = applicationCount === 0 ? 1 : applicationCount === 1 ? 2 : null;
 
-  const handleApplySuccess = (projectId) => {
+  const handleApplySuccess = () => {
     fetchMyApplications();
+    fetchInvitations();
     loadProjects();
+    setWidgetRefreshKey((k) => k + 1);
   };
 
   const handleLogout = async () => {
@@ -386,13 +391,13 @@ export default function StudentDashboard() {
               {/* Left: Section & Student Info */}
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-700 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-cyan-600/20">
-                  {user.section?.name || user.sectionName || "A"}
+                  {user.section?.name || user.sectionName || "–"}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Official Allocation</span>
                     <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300">
-                      Section {user.section?.name || user.sectionName || "A"}
+                      Section {user.section?.name || user.sectionName || "–"}
                     </span>
                   </div>
                   <h3 className="text-lg font-black text-slate-950 mt-0.5">
@@ -414,10 +419,10 @@ export default function StudentDashboard() {
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-black text-blue-800 tracking-wider">Faculty Advisor</p>
                     <p className="text-xs font-black text-slate-900 truncate">
-                      {user.facultyAdvisor?.fullName || "Dr. M. K. Srilekha"}
+                      {user.facultyAdvisor?.fullName || "Not yet assigned"}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium truncate">
-                      {user.facultyAdvisor?.email || "srilekhm@srmist.edu.in"}
+                      {user.facultyAdvisor?.email || ""}
                     </p>
                   </div>
                 </div>
@@ -430,7 +435,7 @@ export default function StudentDashboard() {
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-black text-indigo-800 tracking-wider">Head of Department (HOD)</p>
                     <p className="text-xs font-black text-slate-900 truncate">
-                      {user.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
+                      {user.departmentRel?.hod?.fullName || "Not yet assigned"}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium truncate">
                       {user.departmentRel?.hod?.email || ""}
@@ -443,7 +448,7 @@ export default function StudentDashboard() {
         )}
 
         {/* 🎫 LIVE ROSTER & TICKET TRACKER PORTAL WIDGET */}
-        <TicketTrackerWidget currentUser={user} />
+        <TicketTrackerWidget currentUser={user} refreshKey={widgetRefreshKey} />
 
         {/* 🔍 TOP-TIER FILTERING & DISCOVERY CONTROL PANEL */}
         <div className="mt-8 bg-white rounded-3xl border-2 border-slate-900 shadow-xl p-5 sm:p-7 space-y-6">

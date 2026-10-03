@@ -97,7 +97,7 @@ const replaceMember = async (ticket, row, changes, roster) => {
   }
 
   const replacement = await prisma.user.findUnique({ where: { id: requested._id } });
-  if (!replacement) {
+  if (!replacement || replacement.role !== "student" || !replacement.regNo) {
     throw new TicketError("The requested replacement student no longer exists.");
   }
   if (roster.some((m) => m.studentId === replacement.id)) {
@@ -124,28 +124,32 @@ const replaceMember = async (ticket, row, changes, roster) => {
   }
 
   if (ticket.teamId) {
-    await prisma.teamMember.delete({ where: { id: row.id } });
-    await prisma.teamMember.create({
-      data: {
-        teamId: ticket.teamId,
-        studentId: replacement.id,
-        name: replacement.fullName,
-        regNo: replacement.regNo,
-      },
-    });
+    await prisma.$transaction([
+      prisma.teamMember.delete({ where: { id: row.id } }),
+      prisma.teamMember.create({
+        data: {
+          teamId: ticket.teamId,
+          studentId: replacement.id,
+          name: replacement.fullName,
+          regNo: replacement.regNo,
+        },
+      }),
+    ]);
   } else {
-    await prisma.applicationMember.delete({ where: { id: row.id } });
-    await prisma.applicationMember.create({
-      data: {
-        applicationId: ticket.applicationId,
-        studentId: replacement.id,
-        name: replacement.fullName,
-        regNo: replacement.regNo,
-        department: replacement.department || "Dept of ECE",
-        internshipStatus: theirCohort,
-        status: "approved",
-      },
-    });
+    await prisma.$transaction([
+      prisma.applicationMember.delete({ where: { id: row.id } }),
+      prisma.applicationMember.create({
+        data: {
+          applicationId: ticket.applicationId,
+          studentId: replacement.id,
+          name: replacement.fullName,
+          regNo: replacement.regNo,
+          department: replacement.department || "Dept of ECE",
+          internshipStatus: theirCohort,
+          status: "approved",
+        },
+      }),
+    ]);
   }
 
   await prisma.notification.create({
@@ -199,9 +203,10 @@ const executeCancellation = async (ticket) => {
     } else {
       // Multiple members: remove this student
       const memberRow = members.find((m) => m.studentId === studentId);
-      if (memberRow) {
-        await prisma.teamMember.delete({ where: { id: memberRow.id } });
+      if (!memberRow) {
+        throw new TicketError("The student named on this ticket is no longer on the team roster.");
       }
+      await prisma.teamMember.delete({ where: { id: memberRow.id } });
       return `${target.name || "Student"} has officially left the project team. The team now has ${members.length - 1} member(s).`;
     }
   }
@@ -219,9 +224,10 @@ const executeCancellation = async (ticket) => {
       return `Project application was cancelled. Student ${target.name || "member"} has officially left the project.`;
     } else {
       const memberRow = members.find((m) => m.studentId === studentId);
-      if (memberRow) {
-        await prisma.applicationMember.delete({ where: { id: memberRow.id } });
+      if (!memberRow) {
+        throw new TicketError("The student named on this ticket is no longer on the application roster.");
       }
+      await prisma.applicationMember.delete({ where: { id: memberRow.id } });
       return `${target.name || "Student"} was removed from the application roster.`;
     }
   }
@@ -256,17 +262,6 @@ export const getFacultyTickets = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Only teachers can review change tickets." });
     }
 
-    const teacherProjects = await prisma.project.findMany({
-      where: {
-        OR: [
-          { teacherId: req.user._id },
-          { facultyName: req.user.fullName },
-        ],
-      },
-      select: { id: true, projectTitle: true },
-    });
-    const projectTitles = teacherProjects.map((p) => p.projectTitle).filter(Boolean);
-
     const tickets = await prisma.ticket.findMany({
       where: {
         OR: [
@@ -274,8 +269,6 @@ export const getFacultyTickets = async (req, res) => {
           { application: { project: { teacherId: req.user._id } } },
           { projectInchargeId: req.user._id },
           { facultyAdvisorId: req.user._id },
-          { facultyName: req.user.fullName },
-          ...(projectTitles.length > 0 ? [{ projectTitle: { in: projectTitles } }] : []),
           // HOD sees tickets escalated to them (pending) or completed/rejected where they were involved
           { hodId: req.user._id, hodApproval: { in: ["pending", "approved", "rejected"] } },
         ],
@@ -290,9 +283,7 @@ export const getFacultyTickets = async (req, res) => {
       if (
         t.projectInchargeId === req.user._id ||
         t.team?.project?.teacherId === req.user._id ||
-        t.application?.project?.teacherId === req.user._id ||
-        t.facultyName === req.user.fullName ||
-        projectTitles.includes(t.projectTitle)
+        t.application?.project?.teacherId === req.user._id
       ) {
         roles.push("project_incharge");
       }
@@ -331,21 +322,14 @@ export const actOnTicket = async (req, res) => {
     }
 
     const project = projectOf(ticket);
-    const teacherProjects = await prisma.project.findMany({
-      where: {
-        OR: [{ teacherId: req.user._id }, { facultyName: req.user.fullName }],
-      },
-      select: { projectTitle: true },
-    });
-    const projectTitles = teacherProjects.map((p) => p.projectTitle).filter(Boolean);
-
-    const isProjectIncharge =
+    // Roles are decided by account ids only — never by the free-text title/name on the ticket.
+    const isProjectIncharge = Boolean(
       (ticket.projectInchargeId && ticket.projectInchargeId === req.user._id) ||
-      (project && project.teacherId === req.user._id) ||
-      (ticket.facultyName && ticket.facultyName === req.user.fullName) ||
-      projectTitles.includes(ticket.projectTitle);
-    const isFacultyAdvisor = ticket.facultyAdvisorId && ticket.facultyAdvisorId === req.user._id;
-    const isHod = ticket.hodId && ticket.hodId === req.user._id;
+        (project && project.teacherId === req.user._id)
+    );
+    const isFacultyAdvisor = Boolean(ticket.facultyAdvisorId && ticket.facultyAdvisorId === req.user._id);
+    // The HOD only takes part in tickets that actually need HOD sign-off.
+    const isHod = Boolean(ticket.hodId && ticket.hodId === req.user._id && ticket.requiresHodApproval);
 
     if (req.user.role !== "teacher" || (!isProjectIncharge && !isFacultyAdvisor && !isHod)) {
       return res.status(403).json({
@@ -372,7 +356,7 @@ export const actOnTicket = async (req, res) => {
         where: { id: ticket.id },
         data: {
           status: "in_review",
-          progressStep: 2,
+          progressStep: Math.max(ticket.progressStep || 1, 2),
           coordinatorRemarks: remarks || ticket.coordinatorRemarks,
           timeline: appendTimeline(
             ticket,
@@ -428,10 +412,11 @@ export const actOnTicket = async (req, res) => {
       if (isProjectIncharge) newInchargeApproval = "approved";
       if (isFacultyAdvisor) newAdvisorApproval = "approved";
       if (isHod) {
-        if (
-          ticket.requiresHodApproval &&
-          (ticket.projectInchargeApproval !== "approved" || ticket.facultyAdvisorApproval !== "approved")
-        ) {
+        // Count approvals this same person is giving in this request (they may be incharge/advisor too).
+        const inchargeOk = ticket.projectInchargeApproval === "approved" || isProjectIncharge;
+        const advisorOk =
+          ["approved", "not_required"].includes(ticket.facultyAdvisorApproval) || isFacultyAdvisor;
+        if (ticket.requiresHodApproval && !(inchargeOk && advisorOk)) {
           return res.status(400).json({
             message: "HOD approval cannot be processed until both Project Incharge and Faculty Advisor have approved.",
           });

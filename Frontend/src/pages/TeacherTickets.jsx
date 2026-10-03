@@ -34,12 +34,7 @@ import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 import RaiseQuotaModal from "../components/RaiseQuotaModal";
 
-const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
-
+import { isAdminEmail } from "../utils/adminUtils";
 const CHANGE_LABEL = {
   name_correction: { text: "Name / Reg. No. Correction", Icon: Edit3 },
   replacement: { text: "Teammate Replacement", Icon: RefreshCw },
@@ -98,7 +93,7 @@ export default function TeacherTickets() {
   const isAdmin = useMemo(() => {
     if (!user?.email) return false;
     const email = user.email.toLowerCase().trim();
-    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+    return isAdminEmail(email);
   }, [user]);
 
   const fetchTickets = useCallback(() => {
@@ -147,7 +142,7 @@ export default function TeacherTickets() {
           fetchTickets();
           fetchMyQuota();
           const email = (res.data.email || "").toLowerCase().trim();
-          if (ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email)) {
+          if (isAdminEmail(email)) {
             fetchAllQuota();
           }
         }

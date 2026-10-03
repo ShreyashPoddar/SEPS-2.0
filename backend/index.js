@@ -56,16 +56,10 @@ const allowedOrigins = Array.from(
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow non-browser clients (curl, Postman) and explicitly listed origins
-      if (!origin || allowedOrigins.some((o) => o === origin || origin.startsWith(o))) {
+      // Allow non-browser clients (curl, Postman) and exactly-listed origins only
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      try {
-        const url = new URL(origin);
-        if (url.hostname.endsWith(".vercel.app") || url.hostname === "localhost") {
-          return callback(null, true);
-        }
-      } catch (_) {}
       callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
@@ -89,10 +83,10 @@ app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 app.use(cookieParser());
 
 // 🛡️ Global API Rate Limiter tuned for Render Free Tier (512MB RAM & 0.1 shared vCPU)
-// Allows 150 requests per 15 minutes per IP (~10 req/min), plenty for normal dashboard navigation
+// A dashboard load is ~8 calls and campus users share a NAT, so the cap is generous.
 const globalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === "development" ? 10000 : 150, // Relaxed for local development
+  max: process.env.NODE_ENV === "development" ? 10000 : 1500, // Relaxed for local development
   standardHeaders: true,
   legacyHeaders: false,
   message: {

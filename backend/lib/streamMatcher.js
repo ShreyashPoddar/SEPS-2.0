@@ -36,7 +36,6 @@ function mapTokenToSpecializations(raw) {
 
   // ECE without "core" (or "ecce" typo) represents ECE with all specialisations -> All Specializations
   if (
-    /\b(ece|ecce)\b/i.test(t) ||
     t.includes("all streams") ||
     t.includes("all specialization") ||
     t.includes("all specialisations") ||
@@ -75,7 +74,13 @@ function mapTokenToSpecializations(raw) {
     res.push("Dept of ECE (Core - Electronics & Communication)");
   }
 
-  return res;
+  if (res.length > 0) return res;
+
+  // Bare "ECE" (no specialization named) means ECE with every specialization.
+  if (/\b(ece|ecce)\b/i.test(t)) return ["All Specializations"];
+
+  // Unknown department (e.g. "CSE", "Dept of IT"): keep it so eligibility can match it.
+  return [raw.trim()];
 }
 
 /**

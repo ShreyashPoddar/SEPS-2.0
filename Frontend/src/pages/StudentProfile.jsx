@@ -248,7 +248,7 @@ export default function StudentProfile() {
        {notification.message && (
         <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 p-4 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
           {notification.type === 'success' ? <CheckCircle className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
-          <span>{notification.message}</span>
+          <span className="whitespace-pre-line">{notification.message}</span>
         </div>
       )}
       <div className="relative max-w-4xl mx-auto z-10 p-4 sm:p-6 lg:p-8">
@@ -289,7 +289,7 @@ export default function StudentProfile() {
                     Reg No: {profile.regNo || "Not set"}
                   </span>
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center gap-1">
-                    <span>🏛️</span> Section {profile.section?.name || profile.sectionName || "A"}
+                    <span>🏛️</span> Section {profile.section?.name || profile.sectionName || "–"}
                   </span>
                   {isStudentProfileComplete(profile) ? (
                     <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
@@ -313,13 +313,13 @@ export default function StudentProfile() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] uppercase font-black text-blue-900 tracking-wider">Faculty Advisor</span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-200 text-blue-950">Sec {profile.section?.name || profile.sectionName || "A"}</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-200 text-blue-950">Sec {profile.section?.name || profile.sectionName || "–"}</span>
                   </div>
                   <p className="text-xs font-extrabold text-slate-900 truncate">
-                    {profile.facultyAdvisor?.fullName || "Dr. M. K. Srilekha"}
+                    {profile.facultyAdvisor?.fullName || "Not yet assigned"}
                   </p>
                   <p className="text-[11px] text-slate-600 font-medium truncate">
-                    {profile.facultyAdvisor?.email || "srilekhm@srmist.edu.in"}
+                    {profile.facultyAdvisor?.email || ""}
                   </p>
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function StudentProfile() {
                 <div className="min-w-0">
                   <span className="text-[10px] uppercase font-black text-indigo-900 tracking-wider">Department HOD</span>
                   <p className="text-xs font-extrabold text-slate-900 truncate">
-                    {profile.departmentRel?.hod?.fullName || "Dr. S. Ramesh Kumar"}
+                    {profile.departmentRel?.hod?.fullName || "Not yet assigned"}
                   </p>
                   <p className="text-[11px] text-slate-600 font-medium truncate">
                     {profile.departmentRel?.hod?.email || ""}
@@ -436,7 +436,7 @@ export default function StudentProfile() {
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                     <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
-                      Sec {profile.section?.name || profile.sectionName || "A"}
+                      Sec {profile.section?.name || profile.sectionName || "–"}
                     </span>
                     <span className="font-bold text-slate-600">🔒 Locked</span>
                   </div>

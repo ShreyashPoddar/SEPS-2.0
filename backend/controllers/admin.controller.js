@@ -1,11 +1,7 @@
 // controllers/admin.controller.js
 import prisma from "../lib/db.js";
 
-const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
+import { isAdminUser } from "../lib/admin.js";
 
 /**
  * Flush all semester records to start afresh for a new semester.
@@ -14,9 +10,7 @@ const ALLOWED_ADMIN_EMAILS = [
 export const flushDatabase = async (req, res) => {
   try {
     const userEmail = (req.user?.email || "").trim().toLowerCase();
-    const isAdmin =
-      req.user?.role === "teacher" &&
-      ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail);
+    const isAdmin = isAdminUser(req.user);
 
     if (!isAdmin) {
       return res.status(403).json({

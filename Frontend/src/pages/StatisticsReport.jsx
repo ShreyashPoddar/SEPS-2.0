@@ -22,12 +22,7 @@ import {
 import { exportReportToExcel, exportReportToPDF } from "../utils/reportExportUtils";
 import FlushDatabaseModal from "../components/FlushDatabaseModal";
 
-const ALLOWED_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
-
+import { isAdminEmail } from "../utils/adminUtils";
 const DOMAINS_LIST = [
   "Antenna design and RF systems",
   "AI/ML/DL based applications",
@@ -63,7 +58,7 @@ export default function StatisticsReport() {
       .then((res) => {
         setUser(res.data);
         const userEmail = (res.data?.email || "").trim().toLowerCase();
-        const isAllowed = ALLOWED_EMAILS.some((e) => e.toLowerCase() === userEmail);
+        const isAllowed = isAdminEmail(userEmail);
         if (res.data && isAllowed) {
           getStatistics()
             .then((statRes) => {
@@ -123,7 +118,7 @@ export default function StatisticsReport() {
 
   if (!user) return <Navigate to="/login" />;
   const currentUserEmail = (user?.email || "").trim().toLowerCase();
-  const isAuthorizedAdmin = ALLOWED_EMAILS.some((e) => e.toLowerCase() === currentUserEmail);
+  const isAuthorizedAdmin = isAdminEmail(currentUserEmail);
   if (!isAuthorizedAdmin) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">

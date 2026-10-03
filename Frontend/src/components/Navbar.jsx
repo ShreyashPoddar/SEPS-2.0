@@ -4,6 +4,7 @@ import { LogOut, User, Bell, Users, BookOpen, Ticket } from 'lucide-react';
 
 import { isStudentProfileComplete } from '../api';
 
+import { isAdminEmail } from "../utils/adminUtils";
 export default function Navbar({ user, handleLogout, notificationCount = 0, pendingTicketsCount = 0 }) {
   const navigate = useNavigate();
   const profileUrl = user?.role === 'teacher' ? '/teacher-profile' : '/student-profile';
@@ -49,11 +50,7 @@ export default function Navbar({ user, handleLogout, notificationCount = 0, pend
         )}
 
         {/* Statistics Report link for allowed teachers */}
-        {user?.role === 'teacher' && [
-          "sangeetm@srmist.edu.in",
-          "vadivukk@srmist.edu.in",
-          "elavelvg@srmist.edu.in"
-        ].some((adm) => adm.toLowerCase() === (user.email || "").trim().toLowerCase()) && (
+        {user?.role === 'teacher' && isAdminEmail(user.email) && (
           <Link 
             to="/teacher/statistics-report"
             className="hidden sm:flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-900 border-2 border-slate-900 rounded-full shadow-sm text-xs font-bold transition whitespace-nowrap shrink-0"

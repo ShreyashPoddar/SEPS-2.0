@@ -331,12 +331,6 @@ export default function Login() {
                     </button>
                   </div>
 
-                  {/* Helpful hint on password format */}
-                  {identifiedUser?.role === "student" && (
-                    <p className="text-[11px] text-slate-500 font-medium mt-1.5 leading-snug">
-                      Hint: First 4 letters of your first name (or first name + surname if under 4 letters) + last 6 digits of your registration number.
-                    </p>
-                  )}
                 </div>
 
                 {error && (

@@ -15,12 +15,9 @@ import {
   Info,
 } from "lucide-react";
 
-export const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
+const toIstDate = (d) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
+import { isAdminEmail } from "../utils/adminUtils";
 export default function SetGlobalDeadline({ user }) {
   const navigate = useNavigate();
   const [deadline, setDeadline] = useState("");
@@ -32,7 +29,7 @@ export default function SetGlobalDeadline({ user }) {
   const userEmail = (user?.email || "").trim().toLowerCase();
   const isAuthorized =
     user?.role === "teacher" &&
-    ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail);
+    isAdminEmail(userEmail);
 
   useEffect(() => {
     getGlobalDeadline()
@@ -42,7 +39,7 @@ export default function SetGlobalDeadline({ user }) {
           setCurrentRaw(raw);
           const dateObj = new Date(raw);
           if (!isNaN(dateObj.getTime())) {
-            setDeadline(dateObj.toISOString().split("T")[0]);
+            setDeadline(toIstDate(dateObj));
           }
         }
       })
@@ -82,7 +79,7 @@ export default function SetGlobalDeadline({ user }) {
   const applyPreset = (daysAhead) => {
     const target = new Date();
     target.setDate(target.getDate() + daysAhead);
-    setDeadline(target.toISOString().split("T")[0]);
+    setDeadline(toIstDate(target));
   };
 
   const handleSubmit = async (e) => {

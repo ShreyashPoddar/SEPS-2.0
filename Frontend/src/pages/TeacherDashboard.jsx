@@ -75,6 +75,7 @@ const ConfirmationModal = ({ message, onConfirm, onCancel }) => (
   </div>
 );
 
+import { isAdminEmail } from "../utils/adminUtils";
 const DOMAIN_OPTIONS = [
   "Antenna design and RF systems",
   "AI/ML/DL based applications",
@@ -88,12 +89,6 @@ const DOMAIN_OPTIONS = [
   "Semiconductor material & Devices",
   "VLSI Design",
   "Wireless Communication",
-];
-
-const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
 ];
 
 export default function TeacherDashboard() {
@@ -130,7 +125,7 @@ export default function TeacherDashboard() {
   const isAdmin = useMemo(() => {
     if (!user?.email) return false;
     const email = user.email.toLowerCase().trim();
-    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+    return isAdminEmail(email);
   }, [user]);
 
   const showNotification = (message, type = "error") => {
@@ -184,12 +179,12 @@ export default function TeacherDashboard() {
     getNotifications()
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : res.data?.notifications || [];
-        setNotificationCount(list.length);
+        setNotificationCount(list.filter((n) => !n.isRead).length);
       })
       .catch((err) => console.error("Error loading notifications:", err));
 
     const email = (currentUser?.email || "").toLowerCase().trim();
-    if (ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email)) {
+    if (isAdminEmail(email)) {
       getAllQuotaTokens()
         .then((res) => {
           const list = Array.isArray(res.data?.tokens) ? res.data.tokens : [];
@@ -230,6 +225,7 @@ export default function TeacherDashboard() {
         if (res.data?.deadline) {
           setGlobalDeadline(
             new Date(res.data.deadline).toLocaleDateString("en-US", {
+              timeZone: "Asia/Kolkata",
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -505,7 +501,7 @@ export default function TeacherDashboard() {
         )}
 
         {/* Coordinator Controls for Allowed Teachers / Admins */}
-        {user && ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === (user.email || "").trim().toLowerCase()) && (
+        {user && isAdminEmail(user.email) && (
           <div className="mb-6 flex justify-end gap-3 flex-wrap">
             <button
               onClick={() => navigate("/teacher/set-global-deadline")}
@@ -1048,8 +1044,6 @@ export default function TeacherDashboard() {
                       (p.facultyName && user.fullName && p.facultyName.trim().toLowerCase() === user.fullName.trim().toLowerCase()) ||
                       (p.facultyEmail && user.email && p.facultyEmail.trim().toLowerCase() === user.email.trim().toLowerCase()))
                 );
-                const userEmail = (user?.email || "").trim().toLowerCase();
-                const isCoordinator = Boolean(user && ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail));
 
                 return (
                   <div
@@ -1134,7 +1128,7 @@ export default function TeacherDashboard() {
 
                     {/* Bottom Action Buttons */}
                     <div className="mt-4 pt-3 border-t border-slate-200 flex flex-col sm:flex-row gap-2.5">
-                      {isOwner || isCoordinator ? (
+                      {isOwner ? (
                         <>
                           <button
                             onClick={() => handleViewApplications(p._id || p.id)}

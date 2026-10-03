@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAllProjects, updateProject } from "../api";
+import showToast from "../utils/toastUtils";
 import { parseStreams } from "../utils/streamUtils";
 import SpecializationDropdown from "../components/SpecializationDropdown";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -34,7 +35,10 @@ export default function UpdateProject() {
           });
         }
       })
-      .catch((err) => console.error("Failed to load project", err));
+      .catch((err) => {
+        console.error("Failed to load project", err);
+        showToast.error(err, { fallback: "Could not load this project." });
+      });
   }, [projectId]);
 
   const handleChange = (e) => {
@@ -46,9 +50,13 @@ export default function UpdateProject() {
     setLoading(true);
     updateProject(projectId, projectData)
       .then(() => {
+        showToast.success("Project updated successfully.");
         navigate("/teacher-dashboard");
       })
-      .catch((err) => console.error("Update failed", err))
+      .catch((err) => {
+        console.error("Update failed", err);
+        showToast.error(err, { fallback: "Failed to update project." });
+      })
       .finally(() => setLoading(false));
   };
 
@@ -79,7 +87,8 @@ export default function UpdateProject() {
               type="text"
               name="facultyName"
               value={projectData.facultyName}
-              onChange={handleChange}
+              readOnly
+              title="The faculty guide is your account name and cannot be changed here"
               placeholder="Faculty Guide Name"
               className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-black focus:bg-white transition"
               required

@@ -1,6 +1,7 @@
 // middlewares/auth.middlewares.js
 import jwt from "jsonwebtoken";
 import prisma from "../lib/db.js";
+import { isAdminUser } from "../lib/admin.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
@@ -49,13 +50,14 @@ export const protectRoute = async (req, res, next) => {
       },
     });
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(401).json({ message: "Unauthorized - Account no longer exists" });
     }
 
     delete user.password;
     // Alias `_id` -> `id` so existing controller/frontend code that expects
     // Mongo-style `_id` keeps working without further changes.
     user._id = user.id;
+    user.isAdmin = isAdminUser(user);
 
     req.user = user;
     next();

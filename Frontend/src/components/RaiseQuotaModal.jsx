@@ -9,7 +9,8 @@ import LoadingSpinner from "./LoadingSpinner";
 export default function RaiseQuotaModal({
   isOpen,
   onClose,
-  currentCount = 0,
+  currentProjectsCount = 0,
+  currentCount = currentProjectsCount,
   currentQuota = 2,
   onSuccess,
 }) {

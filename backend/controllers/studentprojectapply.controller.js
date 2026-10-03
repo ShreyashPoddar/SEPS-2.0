@@ -5,6 +5,10 @@ const memberOrder = { orderBy: { createdAt: "asc" } };
 
 export const applyToProject = async (req, res) => {
   try {
+    if (req.user.role !== "student") {
+      return res.status(403).json({ message: "Only students can apply to projects." });
+    }
+
     // 0. Verify if the major project registration deadline has passed
     const deadlineDoc = await prisma.globalDeadline.findFirst();
     if (deadlineDoc?.deadline && new Date() > new Date(deadlineDoc.deadline)) {
@@ -82,15 +86,29 @@ export const applyToProject = async (req, res) => {
       });
     }
 
-    const priority = existingMemberships.length === 0 ? 1 : 2;
+    // Take the lowest priority slot not already used, so a student who cancelled
+    // their Priority 1 application can file a new Priority 1 one.
+    const usedPriorities = new Set(existingMemberships.map((m) => m.application.priority));
+    const priority = usedPriorities.has(1) ? 2 : 1;
 
-    if (existingMemberships.some((m) => m.application.priority === priority)) {
+    if (usedPriorities.has(priority)) {
       return res.status(400).json({ message: `You already applied for Priority ${priority}.` });
     }
 
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return res.status(404).json({ message: "Project not found." });
+    }
+
+    const allocatedTeam = await prisma.teamApproved.findFirst({
+      where: { projectId, members: { some: {} } },
+    });
+    if (allocatedTeam) {
+      return res.status(400).json({ message: "This project has already been allocated to a team." });
+    }
+    const applicationCount = await prisma.studentProjectApply.count({ where: { projectId } });
+    if (applicationCount >= 3) {
+      return res.status(400).json({ message: "This project already has the maximum number of applications." });
     }
 
     if (!isStudentEligibleForStream(leader, project.stream)) {
@@ -123,9 +141,15 @@ export const applyToProject = async (req, res) => {
           ? await prisma.user.findFirst({ where: { OR: orClauses } })
           : null;
 
-        if (!memberUser) {
+        if (!memberUser || memberUser.role !== "student" || !memberUser.regNo) {
           return res.status(404).json({
             message: `Student with Reg No "${member.regNo}" not found.`,
+          });
+        }
+
+        if (!isStudentEligibleForStream(memberUser, project.stream)) {
+          return res.status(403).json({
+            message: `${memberUser.fullName} (${memberUser.regNo}) is not eligible for this project's stream(s): ${project.stream}.`,
           });
         }
 
@@ -290,6 +314,10 @@ export const respondToInvitation = async (req, res) => {
       });
     }
 
+    if (application.status !== "pending_member_approval") {
+      return res.status(400).json({ message: "This invitation is no longer open." });
+    }
+
     if (response === "approved") {
       const memberApproved = await prisma.teamMember.findFirst({
         where: { studentId },
@@ -331,6 +359,18 @@ export const respondToInvitation = async (req, res) => {
       }
     } else {
       await prisma.studentProjectApply.delete({ where: { id: applicationId } });
+      for (const m of application.members) {
+        if (m.studentId !== studentId) {
+          await prisma.notification.create({
+            data: {
+              userId: m.studentId,
+              title: "Team Invitation Declined",
+              message: `${member.name} declined the team invitation, so the application was withdrawn.`,
+              type: "warning",
+            },
+          });
+        }
+      }
       return res.status(200).json({
         message: "You have rejected the invitation. The application has been withdrawn.",
       });
@@ -357,10 +397,7 @@ export const getApplicationsForProject = async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const isOwner =
-      project.teacherId === req.user._id ||
-      project.teacherId === req.user.id ||
-      project.facultyName?.trim().toLowerCase() === req.user.fullName?.trim().toLowerCase();
+    const isOwner = project.teacherId === req.user._id;
     if (!isOwner) {
       return res.status(403).json({
         message: "Access denied. You can only view applications for your own projects.",
@@ -433,8 +470,20 @@ export const getApplicationsForProject = async (req, res) => {
       }
     }
 
+    const approvedTeam = await prisma.teamApproved.findFirst({
+      where: { projectId, members: { some: {} } },
+      include: { members: memberOrder },
+    });
+
     res.status(200).json({
+      approvedTeam: approvedTeam
+        ? {
+            _id: approvedTeam.id,
+            members: approvedTeam.members.map((m) => ({ studentId: m.studentId, name: m.name, regNo: m.regNo })),
+          }
+        : null,
       project: {
+        isApproved: Boolean(approvedTeam),
         _id: project.id,
         title: project.projectTitle,
         facultyName: project.facultyName,
@@ -560,6 +609,22 @@ export const raiseTicket = async (req, res) => {
     if ((!applicationId && !teamId) || !effectiveTargetMember || !changeType || !reason) {
       return res.status(400).json({ message: "All required ticket fields must be provided." });
     }
+    if (!["name_correction", "replacement", "withdrawal", "cancellation"].includes(changeType)) {
+      return res.status(400).json({ message: "Invalid ticket change type." });
+    }
+    if (typeof reason !== "string" || typeof effectiveTargetMember !== "object") {
+      return res.status(400).json({ message: "Invalid ticket payload." });
+    }
+    // A cancellation always concerns the requester, never a teammate.
+    const resolvedTarget =
+      changeType === "cancellation"
+        ? {
+            studentId,
+            name: req.user.fullName,
+            regNo: req.user.regNo || "N/A",
+            department: req.user.department || "Dept of ECE",
+          }
+        : effectiveTargetMember;
 
     // A ticket hangs off either a pending application or an approved team, and
     // the caller must belong to whichever they named. Without this check an
@@ -636,7 +701,18 @@ export const raiseTicket = async (req, res) => {
         : "not_required"
       : "not_required";
 
-    const ticketId = "TCK-" + Math.floor(1000 + Math.random() * 9000);
+    let ticketId;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = "TCK-" + Math.floor(100000 + Math.random() * 900000);
+      const clash = await prisma.ticket.findUnique({ where: { ticketId: candidate }, select: { id: true } });
+      if (!clash) {
+        ticketId = candidate;
+        break;
+      }
+    }
+    if (!ticketId) {
+      return res.status(503).json({ message: "Could not allocate a ticket number. Please try again." });
+    }
 
     const timelineMsg = isCancellation
       ? hasInternship
@@ -650,9 +726,10 @@ export const raiseTicket = async (req, res) => {
         applicationId: teamId ? null : applicationId,
         teamId: teamId || null,
         studentId,
-        projectTitle: projectTitle || project?.projectTitle || "Major Project",
-        facultyName: facultyName || project?.facultyName || "Faculty Guide",
-        targetMember: effectiveTargetMember,
+        // Taken from the project, not the request: ticket routing keys off these.
+        projectTitle: project?.projectTitle || "Major Project",
+        facultyName: project?.facultyName || "Faculty Guide",
+        targetMember: resolvedTarget,
         changeType,
         requestedChanges: requestedChanges || undefined,
         reason,
@@ -690,8 +767,8 @@ export const raiseTicket = async (req, res) => {
               : "Member Withdrawal"
           }`;
       const notifMsg = isCancellation
-        ? `${student?.fullName || "Student"} (${student?.regNo || ""}) has requested to cancel project "${projectTitle || project?.projectTitle}". Please review.`
-        : `${student?.fullName || "Student"} (${student?.regNo || ""}) has raised a change ticket for project "${projectTitle || project?.projectTitle}". Reason: ${reason}.`;
+        ? `${student?.fullName || "Student"} (${student?.regNo || ""}) has requested to cancel project "${project?.projectTitle}". Please review.`
+        : `${student?.fullName || "Student"} (${student?.regNo || ""}) has raised a change ticket for project "${project?.projectTitle}". Reason: ${reason}.`;
 
       await prisma.notification.create({
         data: {
@@ -708,7 +785,7 @@ export const raiseTicket = async (req, res) => {
         data: {
           userId: facultyAdvisorId,
           title: "Advisee Project Cancellation Request",
-          message: `Your advisee ${student?.fullName || "Student"} (${student?.regNo || ""}) has requested to cancel project "${projectTitle || project?.projectTitle}". Please review.`,
+          message: `Your advisee ${student?.fullName || "Student"} (${student?.regNo || ""}) has requested to cancel project "${project?.projectTitle}". Please review.`,
           type: "warning",
         },
       });

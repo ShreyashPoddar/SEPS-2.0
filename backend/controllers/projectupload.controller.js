@@ -17,6 +17,9 @@ const withId = (obj) => {
 
 const createProject = async (req, res) => {
   try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Access denied. Only faculty can create projects." });
+    }
     const { projectTitle, description, stream, domain } = req.body;
     const canonicalStream = mapRawStreamToCanonical(stream);
 
@@ -28,7 +31,7 @@ const createProject = async (req, res) => {
       where: { id: teacherId },
       select: { projectQuota: true },
     });
-    const allowedLimit = teacher?.projectQuota || 2;
+    const allowedLimit = teacher?.projectQuota ?? 2;
     const currentCount = await prisma.project.count({
       where: { teacherId },
     });
@@ -60,6 +63,7 @@ const getAllProjects = async (req, res) => {
     let excludedIds = [];
     if (!isTeacher) {
       const approvedTeams = await prisma.teamApproved.findMany({
+        where: { members: { some: {} } }, // an emptied team no longer holds the project
         select: { projectId: true },
         distinct: ["projectId"],
       });
@@ -93,6 +97,7 @@ const getAllProjects = async (req, res) => {
       where: isTeacher ? {} : { id: { notIn: excludedIds } },
       include: {
         approvedTeams: {
+          where: { members: { some: {} } },
           select: { id: true, facultyName: true, createdAt: true },
         },
         applications: {
@@ -137,11 +142,10 @@ const getAllProjects = async (req, res) => {
 
 const getProjectsByTeacher = async (req, res) => {
   try {
-    const conditions = [];
-    if (req.user?._id) conditions.push({ teacherId: req.user._id });
-    if (req.user?.id && req.user.id !== req.user._id) conditions.push({ teacherId: req.user.id });
-    if (req.user?.fullName) conditions.push({ facultyName: req.user.fullName });
-    const where = conditions.length > 0 ? { OR: conditions } : {};
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Access denied. Only faculty have projects." });
+    }
+    const where = { teacherId: req.user._id };
 
     const projects = await prisma.project.findMany({
       where,
@@ -150,6 +154,7 @@ const getProjectsByTeacher = async (req, res) => {
           select: { id: true, status: true, priority: true },
         },
         approvedTeams: {
+          where: { members: { some: {} } },
           select: { id: true, facultyName: true, createdAt: true },
         },
       },
@@ -189,6 +194,7 @@ const getProjectById = async (req, res) => {
           select: { id: true, status: true, priority: true },
         },
         approvedTeams: {
+          where: { members: { some: {} } },
           select: { id: true, facultyName: true, createdAt: true },
         },
       },
@@ -227,9 +233,7 @@ const denyIfNotOwner = async (req, res) => {
     return true;
   }
   const userId = req.user._id || req.user.id;
-  const isOwner =
-    project.teacherId === userId ||
-    (project.facultyName && req.user.fullName && project.facultyName.trim().toLowerCase() === req.user.fullName.trim().toLowerCase());
+  const isOwner = project.teacherId === userId;
 
   if (req.user.role !== "teacher" || !isOwner) {
     res.status(403).json({ message: "Access denied. You can only modify your own projects." });

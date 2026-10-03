@@ -1,17 +1,7 @@
 // backend/controllers/projectquotatoken.controller.js
 import prisma from "../lib/db.js";
 
-const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
-
-const isAdminUser = (user) => {
-  if (!user?.email) return false;
-  const email = user.email.trim().toLowerCase();
-  return ALLOWED_ADMIN_EMAILS.some((e) => e.toLowerCase() === email);
-};
+import { getAdminEmails, isAdminUser } from "../lib/admin.js";
 
 /**
  * Teacher raises a new Project Quota Token to request adding more projects beyond default (2)
@@ -69,7 +59,7 @@ export const createQuotaToken = async (req, res) => {
     // Notify admins about the new quota token
     const adminUsers = await prisma.user.findMany({
       where: {
-        email: { in: ALLOWED_ADMIN_EMAILS },
+        email: { in: getAdminEmails() },
       },
       select: { id: true },
     });
@@ -108,7 +98,7 @@ export const getMyQuotaTokens = async (req, res) => {
       select: { projectQuota: true },
     });
 
-    const currentQuota = teacher?.projectQuota || 2;
+    const currentQuota = teacher?.projectQuota ?? 2;
     const currentProjectsCount = await prisma.project.count({
       where: { teacherId },
     });
@@ -186,9 +176,9 @@ export const getAllQuotaTokens = async (req, res) => {
       teacherEmail: t.teacher?.email || "",
       teacherDepartment: t.teacher?.department || "",
       teacherCurrentProjectsCount: countsMap[t.teacherId] || 0,
-      teacherCurrentQuota: t.teacher?.projectQuota || 2,
+      teacherCurrentQuota: t.teacher?.projectQuota ?? 2,
       currentProjectCount: countsMap[t.teacherId] || 0,
-      currentQuota: t.teacher?.projectQuota || 2,
+      currentQuota: t.teacher?.projectQuota ?? 2,
     }));
 
     return res.status(200).json({ tokens: enrichedTokens });
@@ -203,6 +193,7 @@ export const getAllQuotaTokens = async (req, res) => {
  * PATCH /api/quota-tokens/:id/review
  */
 export const reviewQuotaToken = async (req, res) => {
+  let claimedTokenId = null;
   try {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ message: "Access denied. Administrative privileges required." });
@@ -230,12 +221,22 @@ export const reviewQuotaToken = async (req, res) => {
       });
     }
 
+    // Claim the token atomically so a double click / concurrent review can't apply twice.
+    const claimed = await prisma.projectQuotaToken.updateMany({
+      where: { id, status: "pending" },
+      data: { status: "in_review" },
+    });
+    if (claimed.count === 0) {
+      return res.status(409).json({ message: "This token is already being reviewed or has been reviewed." });
+    }
+    claimedTokenId = id;
+
     const adminId = req.user.id || req.user._id;
     const remarks = (adminRemarks || "").trim();
 
     if (action === "approve") {
       const additionalCount = 1;
-      const currentQuota = token.teacher?.projectQuota || 2;
+      const currentQuota = token.teacher?.projectQuota ?? 2;
       const newQuota = currentQuota + additionalCount;
 
       // Update teacher quota and token status
@@ -307,6 +308,12 @@ export const reviewQuotaToken = async (req, res) => {
     }
   } catch (error) {
     console.error("Error reviewing quota token:", error);
+    if (claimedTokenId) {
+      // Release the claim so the token can be reviewed again.
+      await prisma.projectQuotaToken
+        .updateMany({ where: { id: claimedTokenId, status: "in_review" }, data: { status: "pending" } })
+        .catch(() => {});
+    }
     return res.status(500).json({ message: "Failed to review quota token", error: error.message });
   }
 };

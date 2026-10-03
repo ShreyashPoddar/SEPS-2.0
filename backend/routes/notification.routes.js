@@ -4,6 +4,7 @@ import {
   createNotification,
   getUserNotifications,
   deleteNotification,
+  markAllRead,
 } from "../controllers/notification.controller.js";
 import { protectRoute } from "../middlewares/auth.middlewares.js"; // ✅ use cookie-based auth
 
@@ -14,6 +15,9 @@ router.post("/create", protectRoute, createNotification);
 
 // GET /api/notifications/me → fetch logged-in user’s notifications
 router.get("/me", protectRoute, getUserNotifications);
+
+// PATCH /api/notifications/read-all → mark everything read
+router.patch("/read-all", protectRoute, markAllRead);
 
 // DELETE /api/notifications/:notificationId → delete/dismiss a notification
 router.delete("/:notificationId", protectRoute, deleteNotification);

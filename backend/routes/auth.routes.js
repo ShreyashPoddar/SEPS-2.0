@@ -15,7 +15,7 @@ const router = express.Router();
 // Step 1: Identifier lookup (entering Reg No / Email)
 const identificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60, // 60 requests per 15 minutes
+  max: 300, // 300 requests per 15 minutes (campus users share a NAT)
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -25,7 +25,8 @@ const identificationLimiter = rateLimit({
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // max 30 login attempts per IP per 15 minutes
+  max: 60, // max 60 failed login attempts per IP per 15 minutes
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

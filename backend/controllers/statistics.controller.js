@@ -1,16 +1,11 @@
 // controllers/statistics.controller.js
 import prisma from "../lib/db.js";
 
-const ALLOWED_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
+import { isAdminUser } from "../lib/admin.js";
 
 export const getStatistics = async (req, res) => {
   try {
-    const userEmail = (req.user?.email || "").trim().toLowerCase();
-    if (!ALLOWED_EMAILS.some((e) => e.toLowerCase() === userEmail)) {
+    if (!isAdminUser(req.user)) {
       return res.status(403).json({ message: "Access denied" });
     }
 

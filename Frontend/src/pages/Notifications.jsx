@@ -5,6 +5,7 @@ import {
   respondToInvitation,
   getNotifications,
   deleteNotification,
+  markAllNotificationsRead,
   getCurrentUser,
   logoutUser,
   getFacultyTickets,
@@ -29,12 +30,7 @@ import {
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 
-const ALLOWED_ADMIN_EMAILS = [
-  "sangeetm@srmist.edu.in",
-  "vadivukk@srmist.edu.in",
-  "elavelvg@srmist.edu.in",
-];
-
+import { isAdminEmail } from "../utils/adminUtils";
 const TYPE_STYLES = {
   success: { Icon: CheckCircle2, ring: "border-emerald-300", tint: "bg-emerald-50", ink: "text-emerald-700" },
   warning: { Icon: AlertTriangle, ring: "border-amber-300", tint: "bg-amber-50", ink: "text-amber-700" },
@@ -63,7 +59,7 @@ export default function Notifications() {
   const isAdmin = useMemo(() => {
     if (!user?.email) return false;
     const email = user.email.toLowerCase().trim();
-    return ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+    return isAdminEmail(email);
   }, [user]);
 
   const fetchData = useCallback((role, currentUser) => {
@@ -77,7 +73,7 @@ export default function Notifications() {
 
     if (role === "teacher") {
       const email = (currentUser?.email || "").toLowerCase().trim();
-      const userIsAdmin = ALLOWED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === email);
+      const userIsAdmin = isAdminEmail(email);
 
       Promise.all([
         getFacultyTickets().catch(() => ({ data: [] })),
@@ -99,6 +95,10 @@ export default function Notifications() {
           ? noteRes.data
           : noteRes.data?.notifications || [];
         setNotifications(list);
+        if (list.some((n) => !n.isRead)) {
+          // Opening the page counts as reading; keep the items, drop the badge.
+          markAllNotificationsRead().catch(() => {});
+        }
       })
       .catch((err) => {
         console.error("Failed to fetch notifications:", err);
@@ -167,7 +167,7 @@ export default function Notifications() {
         <Navbar
           user={user}
           handleLogout={handleLogout}
-          notificationCount={invitations.length + notifications.length}
+          notificationCount={invitations.length}
           pendingTicketsCount={pendingTicketsCount}
         />
 
